@@ -1,0 +1,9 @@
+TODO: fix crahes and other stuff:
+1 - random crash after drop game on server
+2 - random crash when close server connection window (also p2p)
+3 - random crash while idle on server
+4 - sometimes stops receiving messages (unable connect to any server, need to restart emulator/client)
+5 - bufferoverflows when receive long messages
+6 - master list crashes
+7 - sometimes after close client unable open client again
+8 - server name when connect from waiting games list

@@ -1,0 +1,22 @@
+# Build outputs
+Release/
+Debug/
+x64/
+*.obj
+*.lib
+*.exp
+*.dll
+*.pdb
+*.ilk
+
+# Visual Studio files
+*.ncb
+*.opt
+*.plg
+*.user
+*.aps
+*.suo
+.vs/
+
+# Backup folder
+Backup/
