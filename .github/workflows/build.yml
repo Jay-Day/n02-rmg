@@ -24,7 +24,7 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Build x64 Release
-        run: msbuild n02p.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142
+        run: msbuild n02p.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142 /p:WindowsTargetPlatformVersion=10.0
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
