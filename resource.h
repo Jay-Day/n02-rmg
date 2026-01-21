@@ -92,6 +92,8 @@
 #define BTN_REPORT                      1069
 #define BTN_RESET                       1072
 #define IDC_STATS                       1077
+#define IDC_P2P_FDLY                    1078
+#define IDC_P2P_FDLY_LBL                1079
 
 // Next default values for new objects
 // 

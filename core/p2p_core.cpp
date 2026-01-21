@@ -4,6 +4,8 @@
 #include "../common/k_framecache.h"
 #include "../errr.h"
 
+extern int p2p_frame_delay_override;
+
 typedef struct {
 	int crframeno;
 	bool local;
@@ -491,8 +493,14 @@ bool p2p_SynChronizeClocksOrDie(){
 			}
 		}
 		
-		P2PCORE.throughput = 1 + (ttime * 60/1000) + ((PAD>=2)?(PAD-1):0);//P2PCORE.throughput = 1 + (ttime * 60/1000) + (p2p_add_delay_callback()? 1:0);
-		
+		int calculated_delay = 1 + (ttime * 60/1000) + ((PAD>=2)?(PAD-1):0);
+		if (p2p_frame_delay_override > 0) {
+			P2PCORE.throughput = p2p_frame_delay_override;
+			p2p_core_debug("Calculated delay: %i frames, using override: %i frames", calculated_delay, P2PCORE.throughput);
+		} else {
+			P2PCORE.throughput = calculated_delay;
+		}
+
 		p2p_instruction kxxx(TTIME, 0);
 		kxxx.store_int(P2PCORE.throughput);
 		P2PCORE.connection->send_instruction(&kxxx);

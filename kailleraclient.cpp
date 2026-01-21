@@ -302,7 +302,7 @@ class GuiThread : public nThread {
 public:
 	bool running;
 	void run(void) {
-		
+
 		running = true;
 
 #ifdef KAILLERA
@@ -311,7 +311,7 @@ public:
 
 		BYTE kst[256];
 		GetKeyboardState(kst);
-		
+
 		if (kst[VK_CAPITAL]==0)
 			active_mod = mod_p2p;
 		else
@@ -333,7 +333,7 @@ public:
 #else
 		p2p_GUI();
 #endif
-		
+
 		KSSDFA.state = 3;
 		running = false;
 		//*/
@@ -467,7 +467,7 @@ extern "C" {
 	void KAILLERA_DLLEXP kailleraSelectServerDialog(void* parent){
 		KSSDFA.state = 0;
 		KSSDFA.input = 0;
-		
+
 		gui_thread.st(parent);
 		
 		nThread game_thread;

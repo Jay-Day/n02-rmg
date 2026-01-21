@@ -4,6 +4,7 @@
 #include "commctrl.h"
 
 #include <windows.h>
+#include <stdio.h>
 
 class nTab{
 public:
@@ -170,13 +171,24 @@ inline void re_append(HWND hwnd, char * line, COLORREF color = 0){
 	cr.cpMax = cr.cpMin +i;
 	SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
 	CHARFORMATA crf;
-	crf.dwMask = CFM_COLOR;
+	memset(&crf, 0, sizeof(crf));
 	crf.cbSize = sizeof(crf);
+	crf.dwMask = CFM_COLOR | CFM_EFFECTS;
+	crf.dwEffects = 0;  // Clear CFE_AUTOCOLOR
 	crf.crTextColor = color;
 	SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
 	SendMessage(hwnd, EM_REPLACESEL, FALSE, (LPARAM)line);
 	//SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
 	//SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
-	
+
 	SendMessage(hwnd, WM_VSCROLL, SB_BOTTOM, 0);
+}
+
+inline void get_timestamp(char* buffer, size_t size) {
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	int hour = st.wHour % 12;
+	if (hour == 0) hour = 12;
+	const char* ampm = (st.wHour >= 12) ? "PM" : "AM";
+	sprintf(buffer, "[%d:%02d %s] ", hour, st.wMinute, ampm);
 }

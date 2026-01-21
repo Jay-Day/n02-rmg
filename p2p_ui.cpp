@@ -26,7 +26,9 @@ void outp(char * line);
 void __cdecl outpf(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
@@ -36,7 +38,9 @@ void __cdecl outpf(char * arg_0, ...) {
 void __cdecl p2p_core_debug(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
@@ -83,6 +87,7 @@ bool COREINIT = false;
 int PING_TIME;
 int p2p_option_smoothing;
 int p2p_option_forcePort;
+int p2p_frame_delay_override;
 int p2p_cdlg_peer_joined;
 int p2p_sdlg_frameno = 0;
 int p2p_sdlg_pps = 0;
@@ -688,7 +693,7 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 	switch (uMsg) {
 		case WM_INITDIALOG:
 		{
-			
+
 			p2p_ui_ss_dlg = hDlg;
 
 			SetWindowText(hDlg, "n02.p2p " P2P_VERSION);
@@ -722,6 +727,15 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 				SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
 			}
 			SendMessage(GetDlgItem(hDlg, IDC_CLIENTRANDOM), BM_SETCHECK, nSettings::get_int("IDC_CLIENTRANDOM", BST_CHECKED), 0);
+
+			{
+				// Frame delay override (0 = auto-calculated)
+				p2p_frame_delay_override = nSettings::get_int("P2P_FDLY", 0);
+				char fdly_str[16];
+				sprintf(fdly_str, "%d", p2p_frame_delay_override);
+				SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_str);
+			}
+
 			nTab tabb;
 			tabb.handle = p2p_ui_modeseltab = GetDlgItem(hDlg, IDC_TAB1);
 			tabb.AddTab("Ho&st", 0);
@@ -742,6 +756,13 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 		}
 		break;
 	case WM_CLOSE:
+		{
+			// Save frame delay override
+			char fdly_buf[16];
+			GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
+			p2p_frame_delay_override = atoi(fdly_buf);
+			nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
+		}
 		nSettings::set_int("IDC_CLIENTRANDOM", SendMessage(GetDlgItem(hDlg, IDC_CLIENTRANDOM), BM_GETCHECK, 0, 0));
 		GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME, 31);
 		nSettings::set_str("IDC_USRNAME", USERNAME);
@@ -816,11 +837,9 @@ void p2p_GUI(){
 	InitCommonControlsEx(&icx);
 
 	HMODULE p2p_riched_hm = LoadLibrary("riched32.dll");
-	
 
 	DialogBox(hx, (LPCTSTR)MAIN_DIALOG, 0, (DLGPROC)P2PSelectionDialogProc);
 
 	FreeLibrary(p2p_riched_hm);
-
 }
 

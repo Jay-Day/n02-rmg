@@ -11,7 +11,6 @@
 #include "common/nThread.h"
 #include "common/nSettings.h"
 
-
 bool KAILLERA_CORE_INITIALIZED = false;
 bool inGame = false;
 
@@ -235,7 +234,9 @@ void kaillera_goutp(char * line){
 void __cdecl kaillera_gdebug(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
@@ -245,19 +246,23 @@ void __cdecl kaillera_gdebug(char * arg_0, ...) {
 void __cdecl kaillera_ui_gdebug(char* arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start(args, arg_0);
 	vsprintf(V88, V8, args);
 	va_end(args);
 
-	re_append(kaillera_sdlg_RE_GCHAT, V88, 0x00999999);
+	re_append(kaillera_sdlg_RE_GCHAT, V88, 0x00000000);
 }
 
 void __cdecl kaillera_core_debug(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
@@ -267,17 +272,21 @@ void __cdecl kaillera_core_debug(char * arg_0, ...) {
 void __cdecl kaillera_ui_motd(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
 	va_end (args);
-	re_append(kaillera_sdlg_partchat, V88, 0x00336633);
+	re_append(kaillera_sdlg_partchat, V88, 0x00009900);  // Green
 }
 void __cdecl kaillera_error_callback(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
@@ -289,19 +298,23 @@ void __cdecl kaillera_error_callback(char * arg_0, ...) {
 void __cdecl kaillera_ui_debug(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
 	va_end (args);
 
-	re_append(kaillera_sdlg_partchat, V88, 0x00999999);
+	re_append(kaillera_sdlg_partchat, V88, 0x00000000);
 }
 
 void __cdecl kaillera_outpf(char * arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
-	sprintf(V8, "%s\r\n", arg_0);
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
 	vsprintf (V88, V8, args);
@@ -317,9 +330,11 @@ void kaillera_user_add_callback(char*name, int ping, int status, unsigned short 
 	kaillera_sdlg_userslv.AddRow(name, id);
 	x = kaillera_sdlg_userslv.Find(id);
 	wsprintf(bfx, "%i", ping);
-	kaillera_sdlg_userslv.FillRow(bfx, 1, x);
-	kaillera_sdlg_userslv.FillRow(CONNECTION_TYPES[conn], 2, x);
-	kaillera_sdlg_userslv.FillRow(USER_STATUS[status], 3, x);
+	kaillera_sdlg_userslv.FillRow(bfx, 1, x);  // Ping
+	wsprintf(bfx, "%u", id);
+	kaillera_sdlg_userslv.FillRow(bfx, 2, x);  // UID
+	kaillera_sdlg_userslv.FillRow(USER_STATUS[status], 3, x);  // Status
+	kaillera_sdlg_userslv.FillRow(CONNECTION_TYPES[conn], 4, x);  // Connection
 
 }
 void kaillera_game_add_callback(char*gname, unsigned int id, char*emulator, char*owner, char*users, char status){
@@ -341,7 +356,7 @@ void kaillera_game_create_callback(char*gname, unsigned int id, char*emulator, c
 }
 
 void kaillera_chat_callback(char*name, char * msg){
-	if (MINGUIUPDATE && KSSDFA.state==2) 
+	if (MINGUIUPDATE && KSSDFA.state==2)
 		return;
 	kaillera_outpf("<%s> %s", name, msg);
 }
@@ -352,9 +367,27 @@ void kaillera_game_chat_callback(char*name, char * msg){
 	}
 }
 void kaillera_motd_callback(char*name, char * msg){
-	if (MINGUIUPDATE && KSSDFA.state==2) 
+	if (MINGUIUPDATE && KSSDFA.state==2)
 		return;
-	kaillera_ui_motd("- %s", msg);
+
+	// Check if this is a private message (format: "TO: <user>(id): msg" or "<user>(id): msg")
+	bool is_pm = false;
+	if (strncmp(msg, "TO: <", 5) == 0) {
+		is_pm = true;  // Outgoing PM confirmation
+	} else if (msg[0] == '<' && strstr(msg, "): ") != NULL) {
+		is_pm = true;  // Incoming PM
+	}
+
+	if (is_pm) {
+		// Display private messages in bright green
+		char V88[2084];
+		char ts[20];
+		get_timestamp(ts, sizeof(ts));
+		sprintf(V88, "%s- %s\r\n", ts, msg);
+		re_append(kaillera_sdlg_partchat, V88, 0x00009900);  // Green
+	} else {
+		kaillera_ui_motd("- %s", msg);
+	}
 }
 void kaillera_user_join_callback(char*name, int ping, unsigned short id, char conn){
 	if (MINGUIUPDATE && KSSDFA.state==2) 
@@ -364,10 +397,10 @@ void kaillera_user_join_callback(char*name, int ping, unsigned short id, char co
 	kaillera_sdlg_userslvReSort();
 }
 void kaillera_user_leave_callback(char*name, char*quitmsg, unsigned short id){
-	if (MINGUIUPDATE && KSSDFA.state==2) 
+	if (MINGUIUPDATE && KSSDFA.state==2)
 		return;
 	kaillera_sdlg_userslv.DeleteRow(kaillera_sdlg_userslv.Find(id));
-	kaillera_ui_debug("* Parts: %s (%s)", name, quitmsg);
+	kaillera_ui_debug("* Parts: %s", name);
 }
 void kaillera_game_close_callback(unsigned int id){
 	if (MINGUIUPDATE && KSSDFA.state==2) 
@@ -487,6 +520,7 @@ void kaillera_end_game_callback(){
 
 // Menu item IDs for game list menu
 #define MENU_ID_JOIN 1
+#define MENU_ID_SEND_MSG 2
 #define MENU_ID_CREATE_BASE 1000
 
 HMENU kaillera_sdlg_CreateGamesMenu = 0;
@@ -591,7 +625,41 @@ void kaillera_sdlg_show_games_list_menu(HWND handle, bool incjoin = false){
 	}
 }
 void kaillera_sdlg_destroy_games_list_menu(){
-	
+
+}
+
+void kaillera_sdlg_show_users_list_menu(HWND hDlg) {
+	int sel = kaillera_sdlg_userslv.SelectedRow();
+	if (sel < 0 || sel >= kaillera_sdlg_userslv.RowsCount()) {
+		return;
+	}
+
+	POINT pi;
+	GetCursorPos(&pi);
+
+	HMENU menu = CreatePopupMenu();
+	AppendMenu(menu, MF_STRING, MENU_ID_SEND_MSG, "Send Message");
+
+	int result = TrackPopupMenu(menu, TPM_RETURNCMD, pi.x, pi.y, 0, hDlg, NULL);
+	if (result == MENU_ID_SEND_MSG) {
+		// Get the user ID and username from the selected row
+		unsigned short userId = (unsigned short)kaillera_sdlg_userslv.RowNo(sel);
+		char username[128];
+		kaillera_sdlg_userslv.CheckRow(username, 128, 0, sel);
+
+		// Fill the chat input with /msg <UserID>
+		char msgCmd[64];
+		wsprintf(msgCmd, "/msg %d ", userId);
+		SetWindowText(GetDlgItem(hDlg, TXT_CHAT), msgCmd);
+
+		// Set focus to the chat input
+		SetFocus(GetDlgItem(hDlg, TXT_CHAT));
+
+		// Move cursor to end of text
+		SendMessage(GetDlgItem(hDlg, TXT_CHAT), EM_SETSEL, strlen(msgCmd), strlen(msgCmd));
+	}
+
+	DestroyMenu(menu);
 }
 
 bool reconn = false;
@@ -631,6 +699,12 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 	switch (uMsg) {
 	case WM_INITDIALOG:
 		{
+			// Add WS_EX_APPWINDOW and remove WS_EX_TOOLWINDOW to show in Windows taskbar
+			LONG_PTR exStyle = GetWindowLongPtr(hDlg, GWL_EXSTYLE);
+			exStyle |= WS_EX_APPWINDOW;
+			exStyle &= ~WS_EX_TOOLWINDOW;
+			SetWindowLongPtr(hDlg, GWL_EXSTYLE, exStyle);
+
 			kaillera_sdlg = hDlg;
 			{
 				char xx[256];
@@ -638,10 +712,11 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 				SetWindowText(hDlg, xx);
 			}
 			kaillera_sdlg_userslv.handle = GetDlgItem(hDlg, LV_ULIST);
-			kaillera_sdlg_userslv.AddColumn("Name", 100);
+			kaillera_sdlg_userslv.AddColumn("Name", 80);
 			kaillera_sdlg_userslv.AddColumn("Ping", 35);
-			kaillera_sdlg_userslv.AddColumn("Conset", 40);
-			kaillera_sdlg_userslv.AddColumn("Status", 30);
+			kaillera_sdlg_userslv.AddColumn("UID", 30);
+			kaillera_sdlg_userslv.AddColumn("Status", 40);
+			kaillera_sdlg_userslv.AddColumn("Connection", 55);
 			kaillera_sdlg_userslv.FullRowSelect();
 			kaillera_sdlg_userslvColumn = 1;
 			kaillera_sdlg_userslvColumnOrder[1] = 1;
@@ -825,6 +900,9 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			if(((LPNMHDR)lParam)->code==NM_RCLICK && (((LPNMHDR)lParam)->hwndFrom==kaillera_sdlg_gameslv.handle)){
 				kaillera_sdlg_show_games_list_menu(hDlg, kaillera_sdlg_gameslv.SelectedRow() >= 0 && kaillera_sdlg_gameslv.SelectedRow() < kaillera_sdlg_gameslv.RowsCount());
 			}
+			if(((LPNMHDR)lParam)->code==NM_RCLICK && (((LPNMHDR)lParam)->hwndFrom==kaillera_sdlg_userslv.handle)){
+				kaillera_sdlg_show_users_list_menu(hDlg);
+			}
 			break;
 		};
 		return 0;
@@ -848,6 +926,13 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 		//Sleep(150);
 		kaillera_sdlg_port = port;
 		strcpy(kaillera_sdlg_ip, ip);
+
+		// Hide the server selection dialog (and intermediate dialog if different)
+		ShowWindow(kaillera_ssdlg, SW_HIDE);
+		if (pDlg != kaillera_ssdlg) {
+			ShowWindow(pDlg, SW_HIDE);
+		}
+
 		DialogBox(hx, (LPCTSTR)KAILLERA_SDLG, pDlg, (DLGPROC)KailleraServerDialogProc);
 		//disconnect
 		char quitmsg[128] = "Open Kaillera - n02 " KAILLERA_VERSION;
@@ -858,6 +943,12 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 		KSSDFA.state = 0;
 		KSSDFA.input = KSSDFA_END_GAME;
 		//core cleanup
+
+		// Show the server selection dialog again
+		ShowWindow(kaillera_ssdlg, SW_SHOW);
+		if (pDlg != kaillera_ssdlg) {
+			ShowWindow(pDlg, SW_SHOW);
+		}
 	} else {
 		MessageBox(pDlg, "Core Initialization Failed", 0, 0);
 	}
@@ -883,7 +974,35 @@ void KLSListDisplay(){
 	KLSListLv.DeleteAllRows();
 	for (int x = 0; x< KLSList.length; x++){
 		KLSListLv.AddRow(KLSList[x].servname, x);
-		KLSListLv.FillRow(KLSList[x].hostname,1, x);
+		KLSListLv.FillRow(KLSList[x].hostname, 1, x);
+		KLSListLv.FillRow("-", 2, x);  // Ping
+	}
+}
+
+void KLSListRefreshStatus(){
+	for (int x = 0; x < KLSList.length; x++){
+		char host_copy[128];
+		strncpy(host_copy, KLSList[x].hostname, 127);
+		host_copy[127] = 0;
+
+		char* host = host_copy;
+		int port = 27888;
+
+		// Parse host:port
+		char* colon = strchr(host_copy, ':');
+		if (colon) {
+			*colon = 0;
+			port = atoi(colon + 1);
+			if (port == 0) port = 27888;
+		}
+
+		int ping = kaillera_ping_server(host, port, 500);
+		char pingstr[32];
+		if (ping < 500)
+			wsprintf(pingstr, "%ims", ping);
+		else
+			strcpy(pingstr, "N/A");
+		KLSListLv.FillRow(pingstr, 2, x);
 	}
 }
 
@@ -962,7 +1081,7 @@ void KLSListPING(){
 		int ping = kaillera_ping_server(host, port);
 		char pingstr[128];
 		wsprintf(pingstr, "%ims", ping);
-		KLSListLv.FillRow(pingstr, 1, i);
+		KLSListLv.FillRow(pingstr, 2, i);  // Ping column
 
 		//CreateProcess(0, "cmd /k tracert", 0, 0, 0, 0, 0, 0, 0, 0);
 	}
@@ -1042,17 +1161,38 @@ void KLSListDblClick(HWND hDlg){
 
 void KLSListLoad(){
 	KLSList.clear();
+
+	// Always add default servers first
+	KLSNST sx;
+	strcpy(sx.servname, "Chicago SSB"); strcpy(sx.hostname, "92.38.176.115:27888"); KLSList.add(sx);
+	strcpy(sx.servname, "SSBL Georgia Netplay"); strcpy(sx.hostname, "45.61.60.96:27888"); KLSList.add(sx);
+	strcpy(sx.servname, "Miami Secret"); strcpy(sx.hostname, "185.144.159.190:27888"); KLSList.add(sx);
+	strcpy(sx.servname, "Seattle"); strcpy(sx.hostname, "23.227.163.253:27888"); KLSList.add(sx);
+	strcpy(sx.servname, "San Fran"); strcpy(sx.hostname, "165.227.60.3:27888"); KLSList.add(sx);
+
+	// Add any saved servers that aren't duplicates of defaults
 	int count = nSettings::get_int("SLC", 0);
 	for (int x=1;x<=count;x++){
 		char idt[32];
-		KLSNST sx;
+		KLSNST saved;
 		wsprintf(idt, "SLS%i", x);
-		nSettings::get_str(idt,sx.servname, "UserName");
+		nSettings::get_str(idt,saved.servname, "UserName");
 		wsprintf(idt, "SLH%i", x);
-		nSettings::get_str(idt,sx.hostname, "127.0.0.1");
-		KLSList.add(sx);
+		nSettings::get_str(idt,saved.hostname, "127.0.0.1");
+
+		// Check if this hostname already exists in the list
+		bool duplicate = false;
+		for (int i=0; i<KLSList.length; i++){
+			if (strcmp(KLSList[i].hostname, saved.hostname) == 0){
+				duplicate = true;
+				break;
+			}
+		}
+		if (!duplicate)
+			KLSList.add(saved);
 	}
 	KLSListDisplay();
+	KLSListRefreshStatus();
 }
 
 void KLSListSave(){
@@ -1147,9 +1287,14 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 	switch (uMsg) {
 	case WM_INITDIALOG:
 		{
-			
+			// Add WS_EX_APPWINDOW and remove WS_EX_TOOLWINDOW to show in Windows taskbar
+			LONG_PTR exStyle = GetWindowLongPtr(hDlg, GWL_EXSTYLE);
+			exStyle |= WS_EX_APPWINDOW;
+			exStyle &= ~WS_EX_TOOLWINDOW;
+			SetWindowLongPtr(hDlg, GWL_EXSTYLE, exStyle);
+
 			kaillera_ssdlg = hDlg;
-			
+
 			SetWindowText(hDlg, "n02 " KAILLERA_VERSION);
 			
 			nSettings::Initialize("SC");
@@ -1208,8 +1353,9 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 			
 			
 			KLSListLv.handle = GetDlgItem(hDlg, LV_ULIST);
-			KLSListLv.AddColumn("Name", 200);
-			KLSListLv.AddColumn("IP", 180);
+			KLSListLv.AddColumn("Name", 160);
+			KLSListLv.AddColumn("IP", 150);
+			KLSListLv.AddColumn("Ping", 60);
 			KLSListLv.FullRowSelect();
 			
 			
@@ -1333,10 +1479,10 @@ void kaillera_GUI(){
 	icx.dwSize = sizeof(icx);
 	icx.dwICC = ICC_LISTVIEW_CLASSES | ICC_TAB_CLASSES;
 	InitCommonControlsEx(&icx);
-	
+
 	HMODULE p2p_riched_hm = LoadLibrary("riched32.dll");
-	
+
 	DialogBox(hx, (LPCTSTR)KAILLERA_SSDLG, 0, (DLGPROC)KailleraServerSelectDialogProc);
-	
+
 	FreeLibrary(p2p_riched_hm);
 }
