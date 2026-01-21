@@ -20,3 +20,8 @@ x64/
 
 # Backup folder
 Backup/
+
+# Linux build artifacts
+linux/.qmake.stash
+linux/Makefile
+linux/build/
