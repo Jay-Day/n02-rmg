@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <limits.h>
 
 class nTab{
 public:
@@ -160,29 +161,30 @@ public:
 
 
 
-inline void re_append(HWND hwnd, char * line, COLORREF color = 0){
-	//kprintf(line);
-	int i = strlen(line);
-	CHARRANGE cr;
-	GETTEXTLENGTHEX gtx;
-	gtx.codepage = CP_ACP;
-	gtx.flags = GTL_PRECISE;
-	cr.cpMin = GetWindowTextLength(hwnd);//SendMessage(p2p_ui_con_richedit, EM_GETTEXTLENGTHEX, (WPARAM)&gtx, 0);
-	cr.cpMax = cr.cpMin +i;
-	SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
-	CHARFORMATA crf;
-	memset(&crf, 0, sizeof(crf));
-	crf.cbSize = sizeof(crf);
-	crf.dwMask = CFM_COLOR | CFM_EFFECTS;
-	crf.dwEffects = 0;  // Clear CFE_AUTOCOLOR
-	crf.crTextColor = color;
-	SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
-	SendMessage(hwnd, EM_REPLACESEL, FALSE, (LPARAM)line);
-	//SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
-	//SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
+	inline void re_append(HWND hwnd, char * line, COLORREF color = 0){
+		//kprintf(line);
+		size_t len = strlen(line);
+		LONG addLen = (len > (size_t)LONG_MAX) ? LONG_MAX : (LONG)len;
+		CHARRANGE cr;
+		GETTEXTLENGTHEX gtx;
+		gtx.codepage = CP_ACP;
+		gtx.flags = GTL_PRECISE;
+		cr.cpMin = GetWindowTextLength(hwnd);//SendMessage(p2p_ui_con_richedit, EM_GETTEXTLENGTHEX, (WPARAM)&gtx, 0);
+		cr.cpMax = cr.cpMin + addLen;
+		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
+		CHARFORMATA crf;
+		memset(&crf, 0, sizeof(crf));
+		crf.cbSize = sizeof(crf);
+		crf.dwMask = CFM_COLOR | CFM_EFFECTS;
+		crf.dwEffects = 0;  // Clear CFE_AUTOCOLOR
+		crf.crTextColor = color;
+		SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
+		SendMessage(hwnd, EM_REPLACESEL, FALSE, (LPARAM)line);
+		//SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
+		//SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
 
-	SendMessage(hwnd, WM_VSCROLL, SB_BOTTOM, 0);
-}
+		SendMessage(hwnd, WM_VSCROLL, SB_BOTTOM, 0);
+	}
 
 inline void get_timestamp(char* buffer, size_t size) {
 	SYSTEMTIME st;

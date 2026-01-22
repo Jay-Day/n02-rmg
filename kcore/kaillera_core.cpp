@@ -102,7 +102,6 @@ bool kaillera_disconnect(char * quitmsg){
 	n02_TRACE();
 	if (KAILLERAC.USERSTAT >= 1) {
 		if (KAILLERAC.USERSTAT > 1) {
-			int len = strlen(quitmsg);
 			k_instruction ls;
 			ls.type = USERLEAV;
 			ls.store_short(-1);
@@ -778,4 +777,3 @@ int kaillera_ping_server(char * host, int port, int limit) {
 	
 	return GetTickCount() - ti;
 }
-

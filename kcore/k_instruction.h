@@ -8,6 +8,7 @@
 #pragma once
 
 #include <memory.h>
+#include <limits.h>
 
 #ifndef min
 #define min(a,b) ((a<b)? a:b)
@@ -117,10 +118,13 @@ public:
     }
 
     void load_str(char * arg_0, unsigned int arg_4){
-		arg_4 = min(arg_4, strlen(buffer)+1);
+			size_t maxLen = strlen(buffer) + 1;
+			if (maxLen > (size_t)UINT_MAX)
+				maxLen = (size_t)UINT_MAX;
+			arg_4 = min(arg_4, (unsigned int)maxLen);
         arg_4 = min(arg_4, buffer_pos+1);
-		load_bytes(arg_0, arg_4);
-		arg_0[arg_4] = 0x00;
+			load_bytes(arg_0, arg_4);
+			arg_0[arg_4] = 0x00;
     }
 
     void store_int(const unsigned int x){

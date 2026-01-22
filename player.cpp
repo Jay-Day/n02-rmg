@@ -66,9 +66,11 @@ void player_play(char * fn){
 	if (in == HFILE_ERROR) 
 		return;
 	
-	
-	DWORD len = GetFileSize((HANDLE)in, 0);
+
+	long len = _llseek(in, 0, 2);
+	_llseek(in, 0, 0);
 	if (len < 256+16) {
+		_lclose(in);
 		MessageBox(RecordsListDlg, "File too short", "Error", MB_OK | MB_ICONSTOP);
 		return;
 	}
@@ -141,8 +143,10 @@ void RecordsList_Populate_fn(char * fn, int i) {
 		RecordsListDlg_list.FillRow("Error", 1, i);
 		return;
 	}
-	DWORD len = GetFileSize((HANDLE)in, 0);
+	long len = _llseek(in, 0, 2);
+	_llseek(in, 0, 0);
 	if (len < 300) {
+		_lclose(in);
 		RecordsListDlg_list.AddRow(fn, i);
 		RecordsListDlg_list.FillRow("File too short", 1, i);
 		return;
@@ -267,13 +271,14 @@ LRESULT CALLBACK RecordsListDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM 
 		case BTN_DELETE:
 			RecordsList_DeleteSelected();
 			break;
-		case CMB_MODE:
-			if (HIWORD(wParam)==CBN_SELCHANGE) {
-				if (activate_mode(SendMessage(GetDlgItem(hDlg, CMB_MODE), CB_GETCURSEL, 0, 0))){
-					SendMessage(hDlg, WM_CLOSE, 0, 0);
+			case CMB_MODE:
+				if (HIWORD(wParam)==CBN_SELCHANGE) {
+					const int mode = (int)SendMessage(GetDlgItem(hDlg, CMB_MODE), CB_GETCURSEL, 0, 0);
+					if (activate_mode(mode)){
+						SendMessage(hDlg, WM_CLOSE, 0, 0);
+					}
 				}
-			}
-			break;
+				break;
 		};
 		break;
 	case WM_NOTIFY:
@@ -349,5 +354,3 @@ void player_ChatSend(char*){
 bool player_RecordingEnabled(){
 	return false;
 }
-
-

@@ -17,6 +17,7 @@
 
 
 #include <cstdio>
+#include <limits.h>
 
 //#include "common/nprintf.h"
 // our most sexing debug/logging function
@@ -39,14 +40,16 @@ void __cdecl kprintf(char * arg_0, ...) {
 #if 1
 	static HFILE hx = HFILE_ERROR;
 
-	if (hx == HFILE_ERROR) {
-		OFSTRUCT of;
-		hx = OpenFile("keaa.txt", &of, OF_CREATE|OF_WRITE);
+		if (hx == HFILE_ERROR) {
+			OFSTRUCT of;
+			hx = OpenFile("keaa.txt", &of, OF_CREATE|OF_WRITE);
+		}
+		size_t len = strlen(V88);
+		UINT writeLen = (len > (size_t)UINT_MAX) ? UINT_MAX : (UINT)len;
+		_lwrite(hx, V88, writeLen);
+	#endif
+	#endif
 	}
-	_lwrite(hx, V88, strlen(V88));
-#endif
-#endif
-}
 
 typedef struct {
 	char * file;
@@ -163,4 +166,3 @@ int n02ExceptionFilterFunction(_EXCEPTION_POINTERS *ExceptionInfo) {
 	DialogBoxParam(hx, (LPCTSTR)N02_ERRORDLG, 0, (DLGPROC)ErrorReporterDialogProc, (LPARAM)ExceptionInfo);
 	return EXCEPTION_EXECUTE_HANDLER;
 }
-

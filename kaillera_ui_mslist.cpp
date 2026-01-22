@@ -1,6 +1,8 @@
 #include "kaillera_ui.h"
 
 #include <windows.h>
+#include <limits.h>
+#include <stddef.h>
 #include "uihlp.h"
 
 #include "resource.h"
@@ -109,7 +111,11 @@ int DownloadListToBuffer(char * buffer, int size, char * url){
 		if(WSAGetLastError()!=WSAEWOULDBLOCK) return 0;
 	}
 	Sleep(300);
-	sendto(s, RequestBuffer, strlen(RequestBuffer), 0, (sockaddr*)&server, sizeof(server));
+	{
+		size_t reqLen = strlen(RequestBuffer);
+		int sendLen = (reqLen > (size_t)INT_MAX) ? INT_MAX : (int)reqLen;
+		sendto(s, RequestBuffer, sendLen, 0, (sockaddr*)&server, sizeof(server));
+	}
 	char * bf = buffer;
 	int il = size;
 	DWORD t = GetTickCount();
@@ -131,6 +137,7 @@ int kaillera_mslistColumn;
 int kaillera_mslistColumnTypes[7] = {1, 1, 1, 0, 0, 1, 1};
 int kaillera_mslistColumnOrder[7];
 int CALLBACK kaillera_mslistCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
+	const int sortColumn = (int)lParamSort;
 	int ind1 = kaillera_mlv.Find(lParam1);
 	int ind2 = kaillera_mlv.Find(lParam2);
 	if (ind1 == -1 || ind2 == -1)
@@ -138,10 +145,10 @@ int CALLBACK kaillera_mslistCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM l
 
 	char ItemText1[128];
 	char ItemText2[128];
-	kaillera_mlv.CheckRow(ItemText1, 128, lParamSort, ind1);
-	kaillera_mlv.CheckRow(ItemText2, 128, lParamSort, ind2);
-	if (kaillera_mslistColumnTypes[lParamSort]) {
-		if (kaillera_mslistColumnOrder[lParamSort])
+	kaillera_mlv.CheckRow(ItemText1, 128, sortColumn, ind1);
+	kaillera_mlv.CheckRow(ItemText2, 128, sortColumn, ind2);
+	if (kaillera_mslistColumnTypes[sortColumn]) {
+		if (kaillera_mslistColumnOrder[sortColumn])
 			return strcmp(ItemText1, ItemText2);
 		else
 			return -1* strcmp(ItemText1, ItemText2);
@@ -149,7 +156,7 @@ int CALLBACK kaillera_mslistCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM l
 		ind1 = atoi(ItemText1);
 		ind2 = atoi(ItemText2);
 
-		if (kaillera_mslistColumnOrder[lParamSort])
+		if (kaillera_mslistColumnOrder[sortColumn])
 			return (ind1==ind2? 0 : (ind1>ind2? 1 : -1));
 		else
 			return (ind1==ind2? 0 : (ind1>ind2? -1 : 1));
@@ -186,8 +193,8 @@ public:
 			if(ptr==NULL){
 				return;
 			}
-			int len = strlen(ptr);
-			char * end = ptr + len;
+				size_t len = strlen(ptr);
+				char * end = ptr + len;
 			union {
 				char xxz[201];
 				struct {
@@ -368,7 +375,7 @@ public:
 				return;
 			}
 			char * end = strstr(ptr, "\n");
-			int len = end - ptr;
+				ptrdiff_t len = end - ptr;
 			runn = len > 50;
 			union {
 				char xxz[201];
@@ -823,7 +830,7 @@ public:
 			}
 			char * end = strstr(ptr, "\n");
 			SetWindowText(kaillera_mslref, "Parsing list...");
-			int len = end - ptr;
+				ptrdiff_t len = end - ptr;
 			runn = len > 10;
 			if (!runn)
 				SetWindowText(kaillera_mslref,"No games found");

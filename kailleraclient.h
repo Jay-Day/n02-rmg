@@ -58,3 +58,4 @@ extern int numplayers;
 
 void initialize_mode_cb(HWND hDlg);
 bool activate_mode(int mode);
+int get_active_mode_index();

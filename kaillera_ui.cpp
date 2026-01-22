@@ -129,6 +129,7 @@ int kaillera_sdlg_gameslvColumnTypes[7] = {1, 1, 1, 1, 0, 0, 0};
 int kaillera_sdlg_gameslvColumnOrder[7];
 
 int CALLBACK kaillera_sdlg_gameslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
+	const int sortColumn = (int)lParamSort;
 
 	int ind1 = kaillera_sdlg_gameslv.Find(lParam1);
 	int ind2 = kaillera_sdlg_gameslv.Find(lParam2);
@@ -138,12 +139,12 @@ int CALLBACK kaillera_sdlg_gameslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LP
 	char ItemText1[128];
 	char ItemText2[128];
 
-	
-	kaillera_sdlg_gameslv.CheckRow(ItemText1, 128, lParamSort, ind1);
-	kaillera_sdlg_gameslv.CheckRow(ItemText2, 128, lParamSort, ind2);
+		
+	kaillera_sdlg_gameslv.CheckRow(ItemText1, 128, sortColumn, ind1);
+	kaillera_sdlg_gameslv.CheckRow(ItemText2, 128, sortColumn, ind2);
 
-	if (kaillera_sdlg_gameslvColumnTypes[lParamSort]) {
-		if (kaillera_sdlg_gameslvColumnOrder[lParamSort])
+	if (kaillera_sdlg_gameslvColumnTypes[sortColumn]) {
+		if (kaillera_sdlg_gameslvColumnOrder[sortColumn])
 			return strcmp(ItemText1, ItemText2);
 		else
 			return -1*strcmp(ItemText1, ItemText2);
@@ -151,7 +152,7 @@ int CALLBACK kaillera_sdlg_gameslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LP
 		ind1 = atoi(ItemText1);
 		ind2 = atoi(ItemText2);
 
-		if (kaillera_sdlg_gameslvColumnOrder[lParamSort])
+		if (kaillera_sdlg_gameslvColumnOrder[sortColumn])
 			return (ind1==ind2? 0 : (ind1>ind2? 1 : -1));
 		else
 			return (ind1==ind2? 0 : (ind1>ind2? -1 : 1));
@@ -181,23 +182,24 @@ int kaillera_sdlg_userslvColumnTypes[7] = {1, 0, 1, 1, 0, 1, 1};
 int kaillera_sdlg_userslvColumnOrder[7];
 
 int CALLBACK kaillera_sdlg_userslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
+	const int sortColumn = (int)lParamSort;
 	int ind1 = kaillera_sdlg_userslv.Find(lParam1);
 	int ind2 = kaillera_sdlg_userslv.Find(lParam2);
 	if (ind1 == -1 || ind2 == -1)
 		return 0;
 	char ItemText1[128];
 	char ItemText2[128];
-	kaillera_sdlg_userslv.CheckRow(ItemText1, 128, lParamSort, ind1);
-	kaillera_sdlg_userslv.CheckRow(ItemText2, 128, lParamSort, ind2);
-	if (kaillera_sdlg_userslvColumnTypes[lParamSort]) {
-		if (kaillera_sdlg_userslvColumnOrder[lParamSort])
+	kaillera_sdlg_userslv.CheckRow(ItemText1, 128, sortColumn, ind1);
+	kaillera_sdlg_userslv.CheckRow(ItemText2, 128, sortColumn, ind2);
+	if (kaillera_sdlg_userslvColumnTypes[sortColumn]) {
+		if (kaillera_sdlg_userslvColumnOrder[sortColumn])
 			return strcmp(ItemText1, ItemText2);
 		else
 			return -1* strcmp(ItemText1, ItemText2);
 	} else {
 		ind1 = atoi(ItemText1);
 		ind2 = atoi(ItemText2);
-		if (kaillera_sdlg_userslvColumnOrder[lParamSort])
+		if (kaillera_sdlg_userslvColumnOrder[sortColumn])
 			return (ind1==ind2? 0 : (ind1>ind2? 1 : -1));
 		else
 			return (ind1==ind2? 0 : (ind1>ind2? -1 : 1));
@@ -529,12 +531,13 @@ void kaillera_sdlg_create_games_list_menu() {
 	{
 		kaillera_sdlg_GamesCount = 0;
 		char * xx = gamelist;
-		int p;
-		while ((p=strlen(xx))!= 0){
-			xx += p+ 1;
+		size_t p;
+		while ((p = strlen(xx)) != 0){
+			xx += p + 1;
 			kaillera_sdlg_GamesCount++;
 		}
 	}
+
 	MENUITEMINFO mi;
 	char * cx = gamelist;
 	HMENU ht = kaillera_sdlg_CreateGamesMenu = CreatePopupMenu();
@@ -543,7 +546,7 @@ void kaillera_sdlg_create_games_list_menu() {
 	mi.fMask = MIIM_ID | MIIM_TYPE | MFT_STRING;
 	mi.fType = MFT_STRING;
 	int counter = MENU_ID_CREATE_BASE;
-	while ( *cx != 0) {
+	while (*cx != 0) {
 		mi.wID = counter;
 		mi.dwTypeData = cx;
 		mi.dwItemData = 0;
@@ -559,31 +562,32 @@ void kaillera_sdlg_create_games_list_menu() {
 		counter++;
 	}
 }
+
 void kailelra_sdlg_join_selected_game(){
 	int sel = kaillera_sdlg_gameslv.SelectedRow();
-	if (sel>=0 && sel < kaillera_sdlg_gameslv.RowsCount() && !inGame) {
-		unsigned int id = kaillera_sdlg_gameslv.RowNo(sel);
+	if (sel >= 0 && sel < kaillera_sdlg_gameslv.RowsCount() && !inGame) {
+		unsigned int id = (unsigned int)(UINT_PTR)kaillera_sdlg_gameslv.RowNo(sel);
 		char temp[128];
 		kaillera_sdlg_gameslv.CheckRow(temp, 128, 3, sel);
-		if (strcmp(temp, "Waiting")!=0) {
+		if (strcmp(temp, "Waiting") != 0) {
 			kaillera_error_callback("Joining running game is not allowed");
 			return;
 		}
+
 		kaillera_sdlg_gameslv.CheckRow(temp, 128, 0, sel);
 		char * cx = gamelist;
-		while (*cx!=0) {
-			int ll;
-			if (strcmp(cx, temp)==0) {
+		while (*cx != 0) {
+			if (strcmp(cx, temp) == 0) {
 				strcpy(GAME, temp);
 				kaillera_sdlg_gameslv.CheckRow(temp, 128, 1, sel);
-				if (strcmp(temp, APP)!= 0) {
-					if (MessageBox(kaillera_sdlg, "Emulator/version mismatch and the game may desync.\nDo you want to continue?", "Error", MB_YESNO | MB_ICONEXCLAMATION)!=IDYES)
+				if (strcmp(temp, APP) != 0) {
+					if (MessageBox(kaillera_sdlg, "Emulator/version mismatch and the game may desync.\nDo you want to continue?", "Error", MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
 						return;
 				}
 				kaillera_join_game(id);
 				return;
 			}
-			cx += (ll=strlen(cx)) + 1;
+			cx += strlen(cx) + 1;
 		}
 		kaillera_error_callback("The rom '%s' is not in your list.", temp);
 	}
@@ -643,7 +647,7 @@ void kaillera_sdlg_show_users_list_menu(HWND hDlg) {
 	int result = TrackPopupMenu(menu, TPM_RETURNCMD, pi.x, pi.y, 0, hDlg, NULL);
 	if (result == MENU_ID_SEND_MSG) {
 		// Get the user ID and username from the selected row
-		unsigned short userId = (unsigned short)kaillera_sdlg_userslv.RowNo(sel);
+			unsigned short userId = (unsigned short)(UINT_PTR)kaillera_sdlg_userslv.RowNo(sel);
 		char username[128];
 		kaillera_sdlg_userslv.CheckRow(username, 128, 0, sel);
 
@@ -821,38 +825,38 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			case IDC_CREATE:
 				kaillera_sdlg_show_games_list_menu(hDlg);
 				break;
-			case IDC_CHAT:
-				{
-					char buffrr[2024];
-					GetWindowText(GetDlgItem(hDlg, TXT_CHAT), buffrr, 2024);
-					int l = strlen(buffrr);
-					if (l>0) {
-						int p = min(l, 127);
-						char sbf[128];
-						memcpy(sbf, buffrr, p);
-						sbf[p] = 0;
-						kaillera_ui_chat_send(sbf);
+				case IDC_CHAT:
+					{
+						char buffrr[2024];
+						GetWindowText(GetDlgItem(hDlg, TXT_CHAT), buffrr, 2024);
+						size_t l = strlen(buffrr);
+						if (l>0) {
+							size_t p = (l < 127) ? l : 127;
+							char sbf[128];
+							memcpy(sbf, buffrr, p);
+							sbf[p] = 0;
+							kaillera_ui_chat_send(sbf);
 						if (l > p) {
 							l -= p;
 							memcpy(buffrr, buffrr+p, l+1);
 						} else
 							buffrr[0] = 0;
-						SetWindowText(GetDlgItem(hDlg, TXT_CHAT), buffrr);
-						break;
-					}
-					
-				}				
-			case BTN_GCHAT:
-				{
-					char buffrr[2024];
-					GetWindowText(kaillera_sdlg_TXT_GINP, buffrr, 2024);
-					int l = strlen(buffrr);
-					if (l>0) {
-						int p = min(l, 127);
-						char sbf[128];
-						memcpy(sbf, buffrr, p);
-						sbf[p] = 0;
-						kaillera_game_chat_send(sbf);
+							SetWindowText(GetDlgItem(hDlg, TXT_CHAT), buffrr);
+							break;
+						}
+						
+					}				
+				case BTN_GCHAT:
+					{
+						char buffrr[2024];
+						GetWindowText(kaillera_sdlg_TXT_GINP, buffrr, 2024);
+						size_t l = strlen(buffrr);
+						if (l>0) {
+							size_t p = (l < 127) ? l : 127;
+							char sbf[128];
+							memcpy(sbf, buffrr, p);
+							sbf[p] = 0;
+							kaillera_game_chat_send(sbf);
 						if (l > p) {
 							l -= p;
 							memcpy(buffrr, buffrr+p, l+1);
@@ -874,14 +878,14 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			case BTN_START:
 				kaillera_start_game();
 				break;
-			case BTN_KICK:
-				{
-				int x = kaillera_sdlg_LV_GULIST.SelectedRow();
-				if (x > 0 && x < kaillera_sdlg_LV_GULIST.RowsCount()) {
-					kaillera_kick_user(kaillera_sdlg_LV_GULIST.RowNo(x));
-				}
-				}
-				break;
+				case BTN_KICK:
+					{
+					int x = kaillera_sdlg_LV_GULIST.SelectedRow();
+					if (x > 0 && x < kaillera_sdlg_LV_GULIST.RowsCount()) {
+						kaillera_kick_user((unsigned short)(UINT_PTR)kaillera_sdlg_LV_GULIST.RowNo(x));
+					}
+					}
+					break;
 			case CHK_MINGUIUPD:
 				MINGUIUPDATE = SendMessage(GetDlgItem(hDlg,CHK_MINGUIUPD), BM_GETCHECK, 0, 0)==BST_CHECKED;
 				break;
@@ -911,7 +915,13 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 
 
 HWND kaillera_ssdlg;
-HWND kaillera_ssdlg_conset;
+
+static void UpdateModeRadioButtons(HWND hDlg){
+	int mode = get_active_mode_index();
+	if (mode < 0 || mode > 2)
+		mode = 1;
+	CheckRadioButton(hDlg, RB_MODE_P2P, RB_MODE_PLAYBACK, RB_MODE_P2P + mode);
+}
 
 void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 	KAILLERA_CORE_INITIALIZED = true;
@@ -921,7 +931,7 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 	char un[32];
 	GetWindowText(GetDlgItem(kaillera_ssdlg, IDC_USRNAME), un, 32);
 	un[31]=0;
-	int conset = (int)SendMessage(kaillera_ssdlg_conset, CB_GETCURSEL, 0, 0) + 1;
+	const char conset = 1; // Always treat as LAN (highest packet rate)
 	if (kaillera_core_initialize(0, APP, un, conset)) {
 		//Sleep(150);
 		kaillera_sdlg_port = port;
@@ -1331,26 +1341,19 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 				SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
 			}
 			
-			{
-				// Frame delay override (0 = use server value)
-				kaillera_frame_delay_override = nSettings::get_int("FDLY", 0);
-				char fdly_str[16];
-				sprintf(fdly_str, "%d", kaillera_frame_delay_override);
-				SetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), fdly_str);
-			}
+				{
+					// Frame delay override (0 = use server value)
+					kaillera_frame_delay_override = nSettings::get_int("FDLY", 0);
+					if (kaillera_frame_delay_override == 0) {
+						SetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), "");
+					} else {
+						char fdly_str[16];
+						sprintf(fdly_str, "%d", kaillera_frame_delay_override);
+						SetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), fdly_str);
+					}
+					SendMessage(GetDlgItem(hDlg, IDC_QUITMSG), EM_LIMITTEXT, 2, 0);
+				}
 
-			
-			kaillera_ssdlg_conset = GetDlgItem(hDlg, CB_CONSET);
-			SendMessage(kaillera_ssdlg_conset, CB_ADDSTRING, 0, (WPARAM)"LAN      (60 packets/s)");
-			SendMessage(kaillera_ssdlg_conset, CB_ADDSTRING, 0, (WPARAM)"Excellent(30 packets/s)");
-			SendMessage(kaillera_ssdlg_conset, CB_ADDSTRING, 0, (WPARAM)"Good     (20 packets/s)");
-			SendMessage(kaillera_ssdlg_conset, CB_ADDSTRING, 0, (WPARAM)"Average  (15 packets/s)");
-			SendMessage(kaillera_ssdlg_conset, CB_ADDSTRING, 0, (WPARAM)"Low      (12 packets/s)");
-			SendMessage(kaillera_ssdlg_conset, CB_ADDSTRING, 0, (WPARAM)"Bad      (10 packets/s)");
-			SendMessage(kaillera_ssdlg_conset, CB_SETCURSEL, nSettings::get_int("CNS", 0), 0);
-
-			
-			
 			
 			KLSListLv.handle = GetDlgItem(hDlg, LV_ULIST);
 			KLSListLv.AddColumn("Name", 160);
@@ -1358,14 +1361,14 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 			KLSListLv.AddColumn("Ping", 60);
 			KLSListLv.FullRowSelect();
 			
-			
-			KLSListLoad();
+				
+				KLSListLoad();
 
-			
-			initialize_mode_cb(GetDlgItem(hDlg, CMB_MODE));
-			
-		}
-		break;
+				
+				UpdateModeRadioButtons(hDlg);
+				
+			}
+			break;
 	case WM_CLOSE:
 		{
 			char tbuf[128];
@@ -1376,9 +1379,6 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 			
 			GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), tbuf, 128);
 			nSettings::set_str("USRN", tbuf);
-
-			nSettings::set_int("CNS", SendMessage(kaillera_ssdlg_conset, CB_GETCURSEL, 0, 0));
-			
 			
 		}
 		
@@ -1423,12 +1423,17 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 			case BTN_MLIST:
 				ShowMasterSLDialog(hDlg);
 				break;
-			case CMB_MODE:
-				if (HIWORD(wParam)==CBN_SELCHANGE) {
-					if (activate_mode(SendMessage(GetDlgItem(hDlg, CMB_MODE), CB_GETCURSEL, 0, 0))){
-						SendMessage(hDlg, WM_CLOSE, 0, 0);
-					}
-				}
+			case RB_MODE_P2P:
+				if (activate_mode(0))
+					SendMessage(hDlg, WM_CLOSE, 0, 0);
+				break;
+			case RB_MODE_CLIENT:
+				if (activate_mode(1))
+					SendMessage(hDlg, WM_CLOSE, 0, 0);
+				break;
+			case RB_MODE_PLAYBACK:
+				if (activate_mode(2))
+					SendMessage(hDlg, WM_CLOSE, 0, 0);
 				break;
 		};
 		break;

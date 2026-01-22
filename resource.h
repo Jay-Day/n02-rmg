@@ -94,6 +94,10 @@
 #define IDC_STATS                       1077
 #define IDC_P2P_FDLY                    1078
 #define IDC_P2P_FDLY_LBL                1079
+#define RB_MODE_P2P                     1080
+#define RB_MODE_CLIENT                  1081
+#define RB_MODE_PLAYBACK                1082
+#define IDC_HOSTPORT_LBL                1083
 
 // Next default values for new objects
 // 
@@ -101,7 +105,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        110
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1065
+#define _APS_NEXT_CONTROL_VALUE         1084
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

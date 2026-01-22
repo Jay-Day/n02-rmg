@@ -3,6 +3,7 @@
 #include "common/nSettings.h"
 #include "p2p_ui.h"
 #include <windows.h>
+#include <limits.h>
 #include <stdarg.h>
 #include "string.h"
 #include "common/nSTL.h"
@@ -13,6 +14,13 @@
 
 
 extern HINSTANCE hx;
+
+static void UpdateModeRadioButtons(HWND hDlg){
+	int mode = get_active_mode_index();
+	if (mode < 0 || mode > 2)
+		mode = 1;
+	CheckRadioButton(hDlg, RB_MODE_P2P, RB_MODE_PLAYBACK, RB_MODE_P2P + mode);
+}
 
 
 
@@ -174,11 +182,15 @@ void p2p_ui_chat_send(char * xxx){
 		char* host = ptr;
 		while (*++ptr != ' '); *ptr++ = 0;
 		int port = atoi(ptr);
-		while (*++ptr != ' '); *ptr++ = 0;
-		char* cmd = ptr;
-		p2p_send_ssrv_packet(cmd, strlen(cmd)+1, host, port);
-		return;
-	} else if (strcmp(xxx, "/stats")==0) {
+			while (*++ptr != ' '); *ptr++ = 0;
+			char* cmd = ptr;
+			{
+				size_t cmdLen = strlen(cmd) + 1;
+				int sendLen = (cmdLen > (size_t)INT_MAX) ? INT_MAX : (int)cmdLen;
+				p2p_send_ssrv_packet(cmd, sendLen, host, port);
+			}
+			return;
+		} else if (strcmp(xxx, "/stats")==0) {
 		StatsDisplayThreadBegin();
 		return;
 	}
@@ -341,7 +353,6 @@ void p2p_peer_info_callback(char* p33rname, char* app) {
 
 void outp(char * line){
 	//kprintf(line);
-	int i = strlen(line);
 	CHARRANGE cr;
 	GETTEXTLENGTHEX gtx;
 	gtx.codepage = CP_ACP;
@@ -458,11 +469,11 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 				p2p_set_ready(SendMessage(GetDlgItem(hDlg, IDC_READY), BM_GETCHECK, 0, 0)==BST_CHECKED);
 			}
 			break;
-		case CMB_DMODE:
-			{
-				p2p_option_smoothing = SendMessage(GetDlgItem(hDlg, CMB_DMODE), CB_GETCURSEL, 0, 0);
-			}
-			break;
+			case CMB_DMODE:
+				{
+					p2p_option_smoothing = (int)SendMessage(GetDlgItem(hDlg, CMB_DMODE), CB_GETCURSEL, 0, 0);
+				}
+				break;
 		case CHK_ENLISTF:
 			p2p_option_forcePort = SendMessage(GetDlgItem(hDlg, CHK_ENLISTF), BM_GETCHECK, 0, 0) == BST_CHECKED ? 1 : 0;
 		case CHK_ENLIST:
@@ -486,8 +497,7 @@ void InitializeP2PSubsystem(HWND hDlg, bool host){
 
 	HOST = host;
 
-	
-	if (!host && SendMessage(GetDlgItem(p2p_ui_ss_dlg, IDC_CLIENTRANDOM), BM_GETCHECK, 0, 0)==BST_CHECKED){
+	if (!host) {
 		PORT = 0;
 	} else {
 		PORT = GetDlgItemInt(p2p_ui_ss_dlg, IDC_PORT, 0, FALSE);
@@ -503,15 +513,15 @@ void InitializeP2PSubsystem(HWND hDlg, bool host){
 	if (HOST) {
 		if (gamelist != 0) {
 			char * xx = gamelist;
-			int p;
-			while ((p=strlen(xx))!= 0){
+			size_t p;
+			while ((p = strlen(xx)) != 0){
 				if (strcmp(xx, GAME)==0){
 					//kprintf(__FILE__ ":%i", __LINE__);//localhost:27888
 					DialogBox(hx, (LPCTSTR)CONNECTION_DIALOG, NULL, (DLGPROC)ConnectionDialogProc);
 					ShowWindow(p2p_ui_ss_dlg, SW_SHOW);
 					return;
 				}
-				xx += p+ 1;
+				xx += p + 1;
 			}
 		}
 		MessageBox(hDlg, "Pick a valid game", 0,0);
@@ -531,6 +541,8 @@ void InitializeP2PSubsystem(HWND hDlg, bool host){
 void P2PSelectionDialogProcSetMode(HWND hDlg, bool connector){
 
 	if (connector){
+		P2PSelectionDialogProcSetModee(hDlg, IDC_PORT, SW_HIDE);
+		P2PSelectionDialogProcSetModee(hDlg, IDC_HOSTPORT_LBL, SW_HIDE);
 
 		P2PSelectionDialogProcSetModee(hDlg, IDC_ULIST, SW_SHOW);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_CONNECT, SW_SHOW);
@@ -548,6 +560,8 @@ void P2PSelectionDialogProcSetMode(HWND hDlg, bool connector){
 		
 
 	} else {
+		P2PSelectionDialogProcSetModee(hDlg, IDC_PORT, SW_SHOW);
+		P2PSelectionDialogProcSetModee(hDlg, IDC_HOSTPORT_LBL, SW_SHOW);
 
 
 		P2PSelectionDialogProcSetModee(hDlg, IDC_ULIST, SW_HIDE);
@@ -672,12 +686,12 @@ void p2p_hosted_game_callback(char * game){
 	strcpy(GAME, game);
 	if (gamelist != 0) {
 		char * xx = gamelist;
-		int p;
-		while ((p=strlen(xx))!= 0){
+		size_t p;
+		while ((p = strlen(xx)) != 0){
 			if (strcmp(game, xx)==0) {
 				return;
 			}
-			xx += p+ 1;
+			xx += p + 1;
 		}
 	}
 	
@@ -705,36 +719,40 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 			nSettings::get_str("IDC_IP", IP,"127.0.0.1:27886");
 			SetDlgItemText(hDlg, IDC_IP, IP);
 
-			HWND hxx = GetDlgItem(hDlg, IDC_GAME);
-			if (gamelist != 0) {
-				nSettings::get_str("IDC_GAME", GAME, "");
-				char * xx = gamelist;
-				int p;
-				while ((p=strlen(xx))!= 0){
-					SendMessage(hxx, CB_ADDSTRING, 0, (WPARAM)xx);
-					if (strcmp(GAME, xx)==0) {
-						SetWindowText(hxx, GAME);
+				HWND hxx = GetDlgItem(hDlg, IDC_GAME);
+				if (gamelist != 0) {
+					nSettings::get_str("IDC_GAME", GAME, "");
+					char * xx = gamelist;
+					size_t p;
+					while ((p = strlen(xx)) != 0){
+						SendMessage(hxx, CB_ADDSTRING, 0, (WPARAM)xx);
+						if (strcmp(GAME, xx)==0) {
+							SetWindowText(hxx, GAME);
+						}
+						xx += p + 1;
 					}
-					xx += p+ 1;
 				}
-			}
-			{
-				DWORD xxx = 32;
-				GetUserName(USERNAME, &xxx);
-				char un[128];
-				nSettings::get_str("IDC_USRNAME", un, USERNAME);
-				strncpy(USERNAME, un, 32);
-				SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
-			}
-			SendMessage(GetDlgItem(hDlg, IDC_CLIENTRANDOM), BM_SETCHECK, nSettings::get_int("IDC_CLIENTRANDOM", BST_CHECKED), 0);
-
-			{
-				// Frame delay override (0 = auto-calculated)
-				p2p_frame_delay_override = nSettings::get_int("P2P_FDLY", 0);
-				char fdly_str[16];
-				sprintf(fdly_str, "%d", p2p_frame_delay_override);
-				SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_str);
-			}
+				{
+					DWORD xxx = 32;
+					GetUserName(USERNAME, &xxx);
+					char un[128];
+					nSettings::get_str("IDC_USRNAME", un, USERNAME);
+					strncpy(USERNAME, un, 32);
+					SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
+				}
+	
+				{
+					// Frame delay override (0 = auto-calculated)
+					p2p_frame_delay_override = nSettings::get_int("P2P_FDLY", 0);
+					if (p2p_frame_delay_override == 0) {
+						SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), "");
+					} else {
+						char fdly_str[16];
+						sprintf(fdly_str, "%d", p2p_frame_delay_override);
+						SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_str);
+					}
+					SendMessage(GetDlgItem(hDlg, IDC_P2P_FDLY), EM_LIMITTEXT, 2, 0);
+				}
 
 			nTab tabb;
 			tabb.handle = p2p_ui_modeseltab = GetDlgItem(hDlg, IDC_TAB1);
@@ -748,13 +766,13 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 			p2p_ui_storedusers.AddColumn("IP", 180);
 			p2p_ui_storedusers.FullRowSelect();
 
-			
-			P2PLoadStoredUsersList();
+				
+				P2PLoadStoredUsersList();
 
-			initialize_mode_cb(GetDlgItem(hDlg, CMB_MODE));
+				UpdateModeRadioButtons(hDlg);
 
-		}
-		break;
+			}
+			break;
 	case WM_CLOSE:
 		{
 			// Save frame delay override
@@ -763,10 +781,9 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 			p2p_frame_delay_override = atoi(fdly_buf);
 			nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
 		}
-		nSettings::set_int("IDC_CLIENTRANDOM", SendMessage(GetDlgItem(hDlg, IDC_CLIENTRANDOM), BM_GETCHECK, 0, 0));
-		GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME, 31);
-		nSettings::set_str("IDC_USRNAME", USERNAME);
-		nSettings::set_int("IDC_PORT", GetDlgItemInt(hDlg, IDC_PORT, 0, FALSE));
+			GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME, 31);
+			nSettings::set_str("IDC_USRNAME", USERNAME);
+			nSettings::set_int("IDC_PORT", GetDlgItemInt(hDlg, IDC_PORT, 0, FALSE));
 		GetWindowText(GetDlgItem(hDlg, IDC_GAME), GAME, 127);
 		nSettings::set_str("IDC_GAME", GAME);
 		GetWindowText(GetDlgItem(hDlg, IDC_IP), IP, 127);
@@ -801,18 +818,23 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 		case BTN_SSRVWG:
 			p2p_ShowWaitingGamesList();
 			break;
-		case IDC_DELETE:
-			P2PStoredUsersListDelete();
-			break;
-		case CMB_MODE:
-			if (HIWORD(wParam)==CBN_SELCHANGE) {
-				if (activate_mode(SendMessage(GetDlgItem(hDlg, CMB_MODE), CB_GETCURSEL, 0, 0))){
+			case IDC_DELETE:
+				P2PStoredUsersListDelete();
+				break;
+			case RB_MODE_P2P:
+				if (activate_mode(0))
 					SendMessage(hDlg, WM_CLOSE, 0, 0);
-				}
-			}
+				break;
+			case RB_MODE_CLIENT:
+				if (activate_mode(1))
+					SendMessage(hDlg, WM_CLOSE, 0, 0);
+				break;
+			case RB_MODE_PLAYBACK:
+				if (activate_mode(2))
+					SendMessage(hDlg, WM_CLOSE, 0, 0);
+				break;
+			};
 			break;
-		};
-		break;
 	case WM_NOTIFY:
 		NMHDR * nParam = (NMHDR*)lParam;
 		if (nParam->hwndFrom == p2p_ui_modeseltab && nParam->code == TCN_SELCHANGE){
@@ -842,4 +864,3 @@ void p2p_GUI(){
 
 	FreeLibrary(p2p_riched_hm);
 }
-

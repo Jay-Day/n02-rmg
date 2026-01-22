@@ -17,6 +17,8 @@
 #include "common/nSettings.h"
 
 #include "errr.h"
+#include <limits.h>
+#include <stddef.h>
 
 
 #define KAILLERA_DLLEXP __declspec(dllexport) __stdcall
@@ -111,7 +113,12 @@ public:
 	}
 
 	int len(){
-		return position - buffer;
+		ptrdiff_t diff = position - buffer;
+		if (diff < 0)
+			return 0;
+		if (diff > INT_MAX)
+			return INT_MAX;
+		return (int)diff;
 	}
 	void put_char(char x){
 		*position++ = x;
@@ -211,24 +218,34 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 	
 }
 
-void WINAPI _chatReceivedCallback(char *nick, char *text){
-	if (out != HFILE_ERROR) {
-		RecordingBuffer.put_char(8);
-		RecordingBuffer.put_bytes(nick, strlen(nick)+1);
-		RecordingBuffer.put_bytes(text, strlen(text)+1);
+	void WINAPI _chatReceivedCallback(char *nick, char *text){
+		if (out != HFILE_ERROR) {
+			RecordingBuffer.put_char(8);
+			{
+				size_t nickLen = strlen(nick) + 1;
+				size_t textLen = strlen(text) + 1;
+				int nickLenI = (nickLen > (size_t)INT_MAX) ? INT_MAX : (int)nickLen;
+				int textLenI = (textLen > (size_t)INT_MAX) ? INT_MAX : (int)textLen;
+				RecordingBuffer.put_bytes(nick, nickLenI);
+				RecordingBuffer.put_bytes(text, textLenI);
+			}
+		}
+		if (infos_copy.chatReceivedCallback)
+			infos_copy.chatReceivedCallback(nick, text);
 	}
-	if (infos_copy.chatReceivedCallback)
-		infos_copy.chatReceivedCallback(nick, text);
-}
-void WINAPI _clientDroppedCallback(char *nick, int playernb){
-	if (out != HFILE_ERROR) {
-		RecordingBuffer.put_char(20);
-		RecordingBuffer.put_bytes(nick, strlen(nick)+1);
-		RecordingBuffer.put_bytes((char*)&playernb, 4);
+	void WINAPI _clientDroppedCallback(char *nick, int playernb){
+		if (out != HFILE_ERROR) {
+			RecordingBuffer.put_char(20);
+			{
+				size_t nickLen = strlen(nick) + 1;
+				int nickLenI = (nickLen > (size_t)INT_MAX) ? INT_MAX : (int)nickLen;
+				RecordingBuffer.put_bytes(nick, nickLenI);
+			}
+			RecordingBuffer.put_bytes((char*)&playernb, 4);
+		}
+		if (infos_copy.clientDroppedCallback)
+			infos_copy.clientDroppedCallback(nick, playernb);
 	}
-	if (infos_copy.clientDroppedCallback)
-		infos_copy.clientDroppedCallback(nick, playernb);
-}
 
 
 
@@ -239,7 +256,7 @@ void WINAPI _clientDroppedCallback(char *nick, int playernb){
 void initialize_mode_cb(HWND hDlg){
 #ifdef KAILLERA
 	SendMessage(hDlg, CB_ADDSTRING, 0, (WPARAM)"1. P2P");
-	SendMessage(hDlg, CB_ADDSTRING, 0, (WPARAM)"2. Client");
+	SendMessage(hDlg, CB_ADDSTRING, 0, (WPARAM)"2. Server");
 	SendMessage(hDlg, CB_ADDSTRING, 0, (WPARAM)"3. Playback");
 	SendMessage(hDlg, CB_SETCURSEL, mod_active_no, 0);
 	active_mod_index = mod_active_no;
@@ -253,6 +270,7 @@ bool activate_mode(int mode){
 #ifdef KAILLERA
 	if (mode != mod_active_no) {
 		mod_active_no = mode;
+		active_mod_index = mode;
 		mod_rerun = true;
 
 		if (mode == 0)
@@ -266,6 +284,10 @@ bool activate_mode(int mode){
 	}
 #endif
 	return false;
+}
+
+int get_active_mode_index(){
+	return active_mod_index;
 }
 
 void loadSettings() {
@@ -434,24 +456,24 @@ extern "C" {
 #endif
 #endif
 	}
-	void KAILLERA_DLLEXP kailleraSetInfos(kailleraInfos *infos_){
-		infos = *infos_;
-		strncpy(APP, infos.appName, 127);
-		
-		if (gamelist != 0)
-			free(gamelist);
-		gamelist = 0;
-		
-		char * xx = infos.gameList;
-		int l = 0;
-		if (xx != 0) {
-			int p;
-			while ((p=strlen(xx))!= 0){
-				l += p + 1;
-				xx += p+ 1;
-			}
-			l++;
-			gamelist = (char*)malloc(l);
+		void KAILLERA_DLLEXP kailleraSetInfos(kailleraInfos *infos_){
+			infos = *infos_;
+			strncpy(APP, infos.appName, 127);
+			
+			if (gamelist != 0)
+				free(gamelist);
+			gamelist = 0;
+			
+			char * xx = infos.gameList;
+			size_t l = 0;
+			if (xx != 0) {
+				size_t p;
+				while ((p=strlen(xx))!= 0){
+					l += p + 1;
+					xx += p + 1;
+				}
+				l++;
+				gamelist = (char*)malloc(l);
 			memcpy(gamelist, infos.gameList, l);
 		}
 		infos.gameList = gamelist;
