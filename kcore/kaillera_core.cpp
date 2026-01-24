@@ -43,6 +43,8 @@ typedef struct {
 	bool has_dropped;  // Track if player dropped (for restart handling)
 	unsigned short user_id;
 	unsigned int tmoutrsttime;
+	bool pending_fdly_announce;
+	unsigned int fdly_announce_time;
 } KAILLERAC_;
 
 KAILLERAC_ KAILLERAC;
@@ -403,6 +405,12 @@ void kaillera_ProcessGeneralInstruction(k_instruction * ki) {
 				kaillera_game_add_callback(gname, id, emulator, owner, users, status);
 			}
 			KAILLERAC.tmoutrsttime = p2p_GetTime();
+
+			// Schedule frame delay override announcement (delayed to avoid flood control)
+			if (kaillera_frame_delay_override > 0) {
+				KAILLERAC.pending_fdly_announce = true;
+				KAILLERAC.fdly_announce_time = p2p_GetTime() + 2000;
+			}
 			break;
 		}
 	case SERVPING:
@@ -441,6 +449,13 @@ void kaillera_step(){
 		if (KAILLERAC.connection->receive_instruction(&ki, false, &saddr)){
 			kaillera_ProcessGeneralInstruction(&ki);
 		}
+	}
+	// Send pending frame delay announcement after delay
+	if (KAILLERAC.pending_fdly_announce && p2p_GetTime() >= KAILLERAC.fdly_announce_time) {
+		KAILLERAC.pending_fdly_announce = false;
+		char fdly_msg[64];
+		sprintf(fdly_msg, "Using frame delay override: %d", kaillera_frame_delay_override);
+		kaillera_chat_send(fdly_msg);
 	}
 	if (KAILLERAC.USERSTAT > 1 && p2p_GetTime() - KAILLERAC.tmoutrsttime > KAILLERA_TIMEOUT_RESET) {
 		KAILLERAC.tmoutrsttime = p2p_GetTime();
