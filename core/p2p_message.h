@@ -267,9 +267,13 @@ recvx_done:
 	                char* ptr = buff + 1;
 					const char* end = buff + bufflen;
 	                if (instruction_count > 0 && instruction_count < 15 && ptr < end) {
-						// Ignore spoofed/unexpected game packets (P2P is not authenticated).
-						if (addrp != NULL && (addrp->sin_addr.s_addr != addr.sin_addr.s_addr || addrp->sin_port != addr.sin_port))
-							goto recv_done;
+							// Ignore spoofed/unexpected game packets (P2P is not authenticated).
+							// But: during initial connect/handshake (especially host-side), `addr` may not be set yet.
+							if (addrp != NULL &&
+								addr.sin_addr.s_addr != 0 &&
+								addr.sin_port != 0 &&
+								(addrp->sin_addr.s_addr != addr.sin_addr.s_addr || addrp->sin_port != addr.sin_port))
+								goto recv_done;
 						if ((size_t)(end - ptr) < sizeof(p2p_instruction_head))
 							goto recv_done;
 						unsigned char latest_serial = *ptr;
