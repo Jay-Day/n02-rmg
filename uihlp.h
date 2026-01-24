@@ -162,27 +162,36 @@ public:
 
 
 	inline void re_append(HWND hwnd, char * line, COLORREF color = 0){
-		//kprintf(line);
 		size_t len = strlen(line);
 		LONG addLen = (len > (size_t)LONG_MAX) ? LONG_MAX : (LONG)len;
+
+		// Preserve the user's selection (p2pkaillera behavior). This prevents the output window
+		// from "stealing" selection when the user highlights/copies text.
+		CHARRANGE prev;
+		SendMessage(hwnd, EM_EXGETSEL, 0, (LPARAM)&prev);
+
 		CHARRANGE cr;
-		GETTEXTLENGTHEX gtx;
-		gtx.codepage = CP_ACP;
-		gtx.flags = GTL_PRECISE;
-		cr.cpMin = GetWindowTextLength(hwnd);//SendMessage(p2p_ui_con_richedit, EM_GETTEXTLENGTHEX, (WPARAM)&gtx, 0);
+		cr.cpMin = GetWindowTextLength(hwnd);
 		cr.cpMax = cr.cpMin + addLen;
 		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
+
 		CHARFORMATA crf;
 		memset(&crf, 0, sizeof(crf));
 		crf.cbSize = sizeof(crf);
 		crf.dwMask = CFM_COLOR | CFM_EFFECTS;
 		crf.dwEffects = 0;  // Clear CFE_AUTOCOLOR
 		crf.crTextColor = color;
+
+		// Apply formatting before and after insertion. Some rich edit versions (and some DPI /
+		// monitor transitions) are finicky about persisting color on inserted text unless this
+		// is done.
 		SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
 		SendMessage(hwnd, EM_REPLACESEL, FALSE, (LPARAM)line);
-		//SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
-		//SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
+		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
+		SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
 
+		// Restore previous selection and scroll to bottom.
+		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&prev);
 		SendMessage(hwnd, WM_VSCROLL, SB_BOTTOM, 0);
 	}
 

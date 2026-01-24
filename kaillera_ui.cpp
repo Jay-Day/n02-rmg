@@ -74,23 +74,90 @@ HWND kaillera_sdlg_BTN_START;
 HWND kaillera_sdlg_BTN_DROP;
 HWND kaillera_sdlg_BTN_LEAVE;
 HWND kaillera_sdlg_BTN_KICK;
+HWND kaillera_sdlg_BTN_LAGSTAT;
+HWND kaillera_sdlg_BTN_OPTIONS;
+HWND kaillera_sdlg_BTN_ADVERTISE;
 HWND kaillera_sdlg_ST_SPEED;
 HWND kaillera_sdlg_ST_DELAY;
 HWND kaillera_sdlg_BTN_GCHAT;
 HWND kaillera_sdlg_MINGUIUPDATE;
+HWND kaillera_sdlg_TXT_MSG;
+HWND kaillera_sdlg_JOINMSG_LBL;
 UINT_PTR kaillera_sdlg_sipd_timer;
 int kaillera_sdlg_frameno = 0;
 int kaillera_sdlg_pps = 0;
 int kaillera_sdlg_delay = -1;
 int kaillera_frame_delay_override = 0;
 bool MINGUIUPDATE;
+bool hosting = false;
+bool kaillera_sdlg_toggle = false;
+
+static int g_flash_on_user_join = 0;
+static int g_beep_on_user_join = 1;
+
+static void ExecuteOptions();
+
+static bool IsKailleraDialogFocused(){
+	HWND fg = GetForegroundWindow();
+	if (fg == NULL)
+		return false;
+	return GetAncestor(fg, GA_ROOT) == kaillera_sdlg;
+}
+
+static void LoadJoinNotifySettings(){
+	int flash = nSettings::get_int("FLASH");
+	int beep = nSettings::get_int("BEEP");
+
+	g_flash_on_user_join = (flash == -1) ? 0 : (flash != 0);
+	g_beep_on_user_join = (beep == -1) ? 1 : (beep != 0);
+}
+
+static void LoadJoinMessageSetting(){
+	if (kaillera_sdlg_TXT_MSG == NULL)
+		return;
+
+	char msg[128];
+	nSettings::get_str((char*)"JOINMSG", msg, (char*)"");
+	SetWindowText(kaillera_sdlg_TXT_MSG, msg);
+}
+
+static void SaveJoinMessageSetting(){
+	if (kaillera_sdlg_TXT_MSG == NULL)
+		return;
+
+	char msg[128];
+	GetWindowText(kaillera_sdlg_TXT_MSG, msg, (int)sizeof(msg));
+	nSettings::set_str((char*)"JOINMSG", msg);
+}
+
+static void FlashKailleraDialogIfNotFocused(){
+	if (!g_flash_on_user_join)
+		return;
+	if (IsKailleraDialogFocused())
+		return;
+
+	FLASHWINFO fwi;
+	fwi.cbSize = sizeof(fwi);
+	fwi.hwnd = kaillera_sdlg;
+	fwi.dwFlags = FLASHW_TIMERNOFG | FLASHW_TRAY;
+	fwi.uCount = 0;
+	fwi.dwTimeout = 0;
+	FlashWindowEx(&fwi);
+}
 //=======================================================================
 bool kaillera_RecordingEnabled(){
 	return SendMessage(GetDlgItem(kaillera_sdlg, CHK_REC), BM_GETCHECK, 0, 0)==BST_CHECKED;
 }
 int kaillera_sdlg_MODE;
-void kaillera_sdlgGameMode(){
+void kaillera_sdlgGameMode(bool toggle = false){
 	kaillera_sdlg_MODE = 0;
+	if (!toggle){
+		if (hosting)
+			SetWindowText(GetDlgItem(kaillera_sdlg, IDC_CREATE), "Swap");
+		kaillera_sdlg_toggle = false;
+	} else {
+		kaillera_sdlg_toggle = false;
+	}
 	ShowWindow(kaillera_sdlg_CHK_REC,SW_SHOW);
 	ShowWindow(kaillera_sdlg_RE_GCHAT,SW_SHOW);
 	ShowWindow(kaillera_sdlg_TXT_GINP,SW_SHOW);
@@ -99,15 +166,26 @@ void kaillera_sdlgGameMode(){
 	ShowWindow(kaillera_sdlg_BTN_DROP,SW_SHOW);
 	ShowWindow(kaillera_sdlg_BTN_LEAVE,SW_SHOW);
 	ShowWindow(kaillera_sdlg_BTN_KICK,SW_SHOW);
+	ShowWindow(kaillera_sdlg_BTN_LAGSTAT,SW_SHOW);
+	ShowWindow(kaillera_sdlg_BTN_OPTIONS,SW_SHOW);
+	ShowWindow(kaillera_sdlg_BTN_ADVERTISE,SW_SHOW);
 	ShowWindow(kaillera_sdlg_ST_SPEED,SW_SHOW);
 	ShowWindow(kaillera_sdlg_ST_DELAY,SW_SHOW);
 	ShowWindow(kaillera_sdlg_BTN_GCHAT,SW_SHOW);
 	ShowWindow(kaillera_sdlg_MINGUIUPDATE,SW_SHOW);
+	ShowWindow(kaillera_sdlg_TXT_MSG,SW_SHOW);
+	ShowWindow(kaillera_sdlg_JOINMSG_LBL,SW_SHOW);
 	ShowWindow(kaillera_sdlg_gameslv.handle,SW_HIDE);
 }
 
-void kaillera_sdlgNormalMode(){
-	kaillera_sdlg_MODE = 1;
+void kaillera_sdlgNormalMode(bool toggle = false){
+	if (!toggle){
+		kaillera_sdlg_MODE = 1;
+		hosting = false;
+		SetWindowText(GetDlgItem(kaillera_sdlg, IDC_CREATE), "Create");
+	} else {
+		kaillera_sdlg_toggle = true;
+	}
 	ShowWindow(kaillera_sdlg_CHK_REC,SW_HIDE);
 	ShowWindow(kaillera_sdlg_RE_GCHAT,SW_HIDE);
 	ShowWindow(kaillera_sdlg_TXT_GINP,SW_HIDE);
@@ -116,10 +194,15 @@ void kaillera_sdlgNormalMode(){
 	ShowWindow(kaillera_sdlg_BTN_DROP,SW_HIDE);
 	ShowWindow(kaillera_sdlg_BTN_LEAVE,SW_HIDE);
 	ShowWindow(kaillera_sdlg_BTN_KICK,SW_HIDE);
+	ShowWindow(kaillera_sdlg_BTN_LAGSTAT,SW_HIDE);
+	ShowWindow(kaillera_sdlg_BTN_OPTIONS,SW_HIDE);
+	ShowWindow(kaillera_sdlg_BTN_ADVERTISE,SW_HIDE);
 	ShowWindow(kaillera_sdlg_ST_SPEED,SW_HIDE);
 	ShowWindow(kaillera_sdlg_ST_DELAY,SW_HIDE);
 	ShowWindow(kaillera_sdlg_BTN_GCHAT,SW_HIDE);
 	ShowWindow(kaillera_sdlg_MINGUIUPDATE,SW_HIDE);
+	ShowWindow(kaillera_sdlg_TXT_MSG,SW_HIDE);
+	ShowWindow(kaillera_sdlg_JOINMSG_LBL,SW_HIDE);
 	ShowWindow(kaillera_sdlg_gameslv.handle,SW_SHOW);
 }
 //===================================
@@ -232,6 +315,9 @@ void kaillera_goutp(char * line){
 	re_append(kaillera_sdlg_RE_GCHAT, line, 0);
 }
 
+static const COLORREF KAILLERA_COLOR_GREEN = 0x00009900; // matches kaillera_ui_motd()
+static const COLORREF KAILLERA_COLOR_DARK_BLUE = RGB(0, 0, 102); // join/leave in lobby chat
+
 
 void __cdecl kaillera_gdebug(char * arg_0, ...) {
 	char V8[1024];
@@ -245,6 +331,19 @@ void __cdecl kaillera_gdebug(char * arg_0, ...) {
 	va_end (args);
 	kaillera_goutp(V88);
 }
+
+void __cdecl kaillera_gdebug_color(COLORREF color, char* arg_0, ...) {
+	char V8[1024];
+	char V88[2084];
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
+	va_list args;
+	va_start(args, arg_0);
+	vsprintf(V88, V8, args);
+	va_end(args);
+	re_append(kaillera_sdlg_RE_GCHAT, V88, color);
+}
 void __cdecl kaillera_ui_gdebug(char* arg_0, ...) {
 	char V8[1024];
 	char V88[2084];
@@ -257,6 +356,20 @@ void __cdecl kaillera_ui_gdebug(char* arg_0, ...) {
 	va_end(args);
 
 	re_append(kaillera_sdlg_RE_GCHAT, V88, 0x00000000);
+}
+
+void __cdecl kaillera_ui_gdebug_color(COLORREF color, char* arg_0, ...) {
+	char V8[1024];
+	char V88[2084];
+	char ts[20];
+	get_timestamp(ts, sizeof(ts));
+	sprintf(V8, "%s%s\r\n", ts, arg_0);
+	va_list args;
+	va_start(args, arg_0);
+	vsprintf(V88, V8, args);
+	va_end(args);
+
+	re_append(kaillera_sdlg_RE_GCHAT, V88, color);
 }
 
 void __cdecl kaillera_core_debug(char * arg_0, ...) {
@@ -363,7 +476,11 @@ void kaillera_chat_callback(char*name, char * msg){
 	kaillera_outpf("<%s> %s", name, msg);
 }
 void kaillera_game_chat_callback(char*name, char * msg){
-	kaillera_gdebug("<%s> %s", name, msg);
+	if (name != NULL && _stricmp(name, "server") == 0) {
+		kaillera_gdebug_color(KAILLERA_COLOR_GREEN, "<%s> %s", name, msg);
+	} else {
+		kaillera_gdebug("<%s> %s", name, msg);
+	}
 	if (KSSDFA.state==2 && infos.chatReceivedCallback) {
 		infos.chatReceivedCallback(name, msg);
 	}
@@ -428,19 +545,24 @@ void kaillera_game_status_change_callback(unsigned int id, char status, int play
 
 void kaillera_user_game_create_callback(){
 	inGame = true;
+	hosting = true;
 	kaillera_sdlgGameMode();
 	kaillera_sdlg_LV_GULIST.DeleteAllRows();
 	SetWindowText(kaillera_sdlg_RE_GCHAT, "");
 	EnableWindow(kaillera_sdlg_BTN_KICK, TRUE);
 	EnableWindow(kaillera_sdlg_BTN_START, TRUE);
+
+	ExecuteOptions();
 }
 void kaillera_user_game_closed_callback(){
 	inGame = false;
+	hosting = false;
 	kaillera_sdlgNormalMode();
 }
 
 void kaillera_user_game_joined_callback(){
 	inGame = true;
+	hosting = false;
 	kaillera_sdlgGameMode();
 	kaillera_sdlg_LV_GULIST.DeleteAllRows();
 	SetWindowText(kaillera_sdlg_RE_GCHAT, "");
@@ -460,18 +582,27 @@ void kaillera_player_add_callback(char *name, int ping, unsigned short id, char 
 	kaillera_sdlg_LV_GULIST.FillRow(bfx, 3, x);
 }
 void kaillera_player_joined_callback(char * username, int ping, unsigned short uid, char connset){
-	kaillera_ui_gdebug("* Joins: %s", username);
+	kaillera_ui_gdebug_color(KAILLERA_COLOR_DARK_BLUE, "* Joins: %s", username);
 	kaillera_player_add_callback(username, ping, uid, connset);
-	MessageBeep(-1);
+	if (hosting && kaillera_sdlg_TXT_MSG != NULL) {
+		char msg[128];
+		GetWindowText(kaillera_sdlg_TXT_MSG, msg, (int)sizeof(msg));
+		if (msg[0] != 0)
+			kaillera_game_chat_send(msg);
+	}
+	if (g_beep_on_user_join)
+		MessageBeep(MB_OK);
+	FlashKailleraDialogIfNotFocused();
 	if (kaillera_is_game_running())
 		kaillera_kick_user(uid);
 }
 void kaillera_player_left_callback(char * user, unsigned short id){
-	kaillera_ui_gdebug("* Parts: %s", user);
+	kaillera_ui_gdebug_color(KAILLERA_COLOR_DARK_BLUE, "* Parts: %s", user);
 	kaillera_sdlg_LV_GULIST.DeleteRow (kaillera_sdlg_LV_GULIST.Find(id));
 }
 void kaillera_user_kicked_callback(){
 	inGame = false;
+	hosting = false;
 	kaillera_error_callback("* You have been kicked out of the game");
 	KSSDFA.input = KSSDFA_END_GAME;
 	KSSDFA.state = 0;
@@ -697,6 +828,95 @@ void kaillera_ui_chat_send(char * text){
 
 	kaillera_chat_send(text);
 }
+
+static void LoadOptions(HWND hwnd){
+	char str[64];
+	int maxplayers = nSettings::get_int("MAXPLAYERS");
+	int maxping = nSettings::get_int("MAXPING");
+	int flash = nSettings::get_int("FLASH");
+	int beep = nSettings::get_int("BEEP");
+
+	if (maxplayers == -1) maxplayers = 4;
+	wsprintf(str, "%d", maxplayers);
+	SetWindowText(GetDlgItem(hwnd, IDC_MAXPLAYERS), str);
+
+	if (maxping == -1) maxping = 999;
+	wsprintf(str, "%d", maxping);
+	SetWindowText(GetDlgItem(hwnd, IDC_MAXPING), str);
+
+	HWND flashCombo = GetDlgItem(hwnd, IDC_FLASH);
+	SendMessage(flashCombo, CB_ADDSTRING, 0, (LPARAM)"False");
+	SendMessage(flashCombo, CB_ADDSTRING, 0, (LPARAM)"True");
+	SendMessage(flashCombo, CB_SETCURSEL, (flash == 1) ? 1 : 0, 0);
+
+	HWND beepCombo = GetDlgItem(hwnd, IDC_BEEP);
+	SendMessage(beepCombo, CB_ADDSTRING, 0, (LPARAM)"False");
+	SendMessage(beepCombo, CB_ADDSTRING, 0, (LPARAM)"True");
+	SendMessage(beepCombo, CB_SETCURSEL, (beep == 0) ? 0 : 1, 0);
+}
+
+static void SaveOptions(HWND hwnd){
+	char str[64];
+
+	GetWindowText(GetDlgItem(hwnd, IDC_MAXPLAYERS), str, (int)sizeof(str));
+	int maxplayers = atoi(str);
+
+	GetWindowText(GetDlgItem(hwnd, IDC_MAXPING), str, (int)sizeof(str));
+	int maxping = atoi(str);
+
+	int flashSel = (int)SendMessage(GetDlgItem(hwnd, IDC_FLASH), CB_GETCURSEL, 0, 0);
+	int flash = (flashSel == 1) ? 1 : 0;
+
+	int beepSel = (int)SendMessage(GetDlgItem(hwnd, IDC_BEEP), CB_GETCURSEL, 0, 0);
+	int beep = (beepSel == 1) ? 1 : 0;
+
+	nSettings::set_int("MAXPLAYERS", maxplayers);
+	nSettings::set_int("MAXPING", maxping);
+	nSettings::set_int("FLASH", flash);
+	nSettings::set_int("BEEP", beep);
+
+	LoadJoinNotifySettings();
+}
+
+static void ExecuteOptions(){
+	if (!hosting)
+		return;
+
+	int maxplayers = nSettings::get_int("MAXPLAYERS");
+	int maxping = nSettings::get_int("MAXPING");
+
+	char cmd[128];
+	if (maxplayers != -1){
+		wsprintf(cmd, "/maxusers %d", maxplayers);
+		kaillera_game_chat_send(cmd);
+	}
+	if (maxping != -1){
+		wsprintf(cmd, "/maxping %d", maxping);
+		kaillera_game_chat_send(cmd);
+	}
+}
+
+static INT_PTR CALLBACK OptionsDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam){
+	(void)lParam;
+	switch (uMsg){
+		case WM_INITDIALOG:
+			LoadOptions(hDlg);
+			return (INT_PTR)TRUE;
+		case WM_COMMAND:
+			switch (LOWORD(wParam)){
+				case IDOK:
+					SaveOptions(hDlg);
+					ExecuteOptions();
+					EndDialog(hDlg, 0);
+					return (INT_PTR)TRUE;
+				case IDCANCEL:
+					EndDialog(hDlg, 0);
+					return (INT_PTR)TRUE;
+			}
+			break;
+	}
+	return (INT_PTR)FALSE;
+}
 //===========================================================================================
 
 LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -710,6 +930,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			SetWindowLongPtr(hDlg, GWL_EXSTYLE, exStyle);
 
 			kaillera_sdlg = hDlg;
+			LoadJoinNotifySettings();
 			{
 				char xx[256];
 				wsprintf(xx, "Connecting to %s", kaillera_sdlg_NAME);
@@ -748,10 +969,16 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_BTN_DROP = GetDlgItem(hDlg, BTN_DROP);
 			kaillera_sdlg_BTN_LEAVE = GetDlgItem(hDlg, BTN_LEAVE);
 			kaillera_sdlg_BTN_KICK = GetDlgItem(hDlg, BTN_KICK);
+			kaillera_sdlg_BTN_LAGSTAT = GetDlgItem(hDlg, BTN_LAGSTAT);
+			kaillera_sdlg_BTN_OPTIONS = GetDlgItem(hDlg, BTN_OPTIONS);
+			kaillera_sdlg_BTN_ADVERTISE = GetDlgItem(hDlg, BTN_ADVERTISE);
 			kaillera_sdlg_ST_SPEED = GetDlgItem(hDlg, ST_SPEED);
 			kaillera_sdlg_BTN_GCHAT = GetDlgItem(hDlg, BTN_GCHAT);
 			kaillera_sdlg_ST_DELAY = GetDlgItem(hDlg, ST_DELAY);
 			kaillera_sdlg_MINGUIUPDATE = GetDlgItem(hDlg, CHK_MINGUIUPD);
+			kaillera_sdlg_TXT_MSG = GetDlgItem(hDlg, TXT_MSG);
+			kaillera_sdlg_JOINMSG_LBL = GetDlgItem(hDlg, IDC_JOINMSG_LBL);
+			LoadJoinMessageSetting();
 
 			SendMessage(kaillera_sdlg_RE_GCHAT, EM_AUTOURLDETECT, TRUE, FALSE);
 
@@ -804,6 +1031,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 		}
 		break;
 	case WM_CLOSE:
+		SaveJoinMessageSetting();
 
 		KillTimer(hDlg, kaillera_sdlg_sipd_timer);
 		
@@ -822,8 +1050,19 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 		break;
 	case WM_COMMAND:
 		switch (LOWORD(wParam)) {
+			case TXT_MSG:
+				if (HIWORD(wParam) == EN_KILLFOCUS)
+					SaveJoinMessageSetting();
+				break;
 			case IDC_CREATE:
-				kaillera_sdlg_show_games_list_menu(hDlg);
+				if (kaillera_sdlg_MODE == 1){
+					kaillera_sdlg_show_games_list_menu(hDlg);
+				} else if (hosting) {
+					if (!kaillera_sdlg_toggle)
+						kaillera_sdlgNormalMode(true);
+					else
+						kaillera_sdlgGameMode(true);
+				}
 				break;
 				case IDC_CHAT:
 					{
@@ -867,6 +1106,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 					break;
 				}
 			case BTN_LEAVE:
+				SaveJoinMessageSetting();
 				kaillera_leave_game();
 				kaillera_sdlgNormalMode();
 				KSSDFA.input = KSSDFA_END_GAME;
@@ -877,6 +1117,34 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 				break;
 			case BTN_START:
 				kaillera_start_game();
+				break;
+			case BTN_LAGSTAT:
+				{
+					char cmd[] = "/lagstat";
+					kaillera_game_chat_send(cmd);
+				}
+				break;
+			case BTN_OPTIONS:
+				DialogBox(hx, (LPCTSTR)KAILLERA_OPTIONS, hDlg, (DLGPROC)OptionsDialogProc);
+				break;
+			case BTN_ADVERTISE:
+				{
+					char ad[512];
+					char hostname[128];
+					hostname[0] = 0;
+					int maxplayers = kaillera_sdlg_LV_GULIST.RowsCount();
+					if (maxplayers > 0) {
+						kaillera_sdlg_LV_GULIST.CheckRow(hostname, (int)sizeof(hostname), 0, 0);
+					}
+
+					if (hosting) {
+						wsprintf(ad, "%s - %d player(s)", GAME, maxplayers);
+					} else {
+						wsprintf(ad, "<%s> | %s - %d player(s)", hostname, GAME, maxplayers);
+					}
+
+					kaillera_chat_send(ad);
+				}
 				break;
 				case BTN_KICK:
 					{

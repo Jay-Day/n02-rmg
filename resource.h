@@ -20,6 +20,7 @@
 #define RECORDER_PLAYBACK               109
 #define N02_ERRORDLG                    110
 #define N02_STATSDLG                    113
+#define KAILLERA_OPTIONS                114
 #define IDC_PORT                        1000
 #define IDC_CONNECT                     1001
 #define IDC_IP                          1002
@@ -98,14 +99,23 @@
 #define RB_MODE_CLIENT                  1081
 #define RB_MODE_PLAYBACK                1082
 #define IDC_HOSTPORT_LBL                1083
+#define BTN_LAGSTAT                     1084
+#define BTN_OPTIONS                     1085
+#define BTN_ADVERTISE                   1086
+#define IDC_MAXPLAYERS                  1087
+#define IDC_MAXPING                     1088
+#define IDC_FLASH                       1090
+#define IDC_BEEP                        1091
+#define TXT_MSG                         1092
+#define IDC_JOINMSG_LBL                 1093
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        110
+#define _APS_NEXT_RESOURCE_VALUE        115
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1084
+#define _APS_NEXT_CONTROL_VALUE         1094
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
