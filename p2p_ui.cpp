@@ -777,15 +777,15 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 
 			}
 			break;
-	case WM_CLOSE:
-		{
-			// Save frame delay override
-			char fdly_buf[16];
-			GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
-			p2p_frame_delay_override = atoi(fdly_buf);
-			nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
-		}
-			GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME, 31);
+		case WM_CLOSE:
+			{
+				// Save frame delay override
+				char fdly_buf[16];
+				GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
+				p2p_frame_delay_override = atoi(fdly_buf);
+				nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
+			}
+				GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME, 31);
 			nSettings::set_str("IDC_USRNAME", USERNAME);
 			nSettings::set_int("IDC_PORT", GetDlgItemInt(hDlg, IDC_PORT, 0, FALSE));
 		GetWindowText(GetDlgItem(hDlg, IDC_GAME), GAME, 127);
@@ -805,14 +805,28 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 
 		nSettings::Terminate();
 		break;
-	case WM_COMMAND:
-		switch (LOWORD(wParam)) {
-		case IDC_CONNECT:
-			InitializeP2PSubsystem(hDlg, false);
-			break;
-		case IDC_HOST:
-			InitializeP2PSubsystem(hDlg, true);
-			break;
+		case WM_COMMAND:
+			switch (LOWORD(wParam)) {
+			case IDC_CONNECT:
+				// Persist any edited frame delay override (even if the dialog stays open)
+				{
+					char fdly_buf[16];
+					GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
+					p2p_frame_delay_override = atoi(fdly_buf);
+					nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
+				}
+				InitializeP2PSubsystem(hDlg, false);
+				break;
+			case IDC_HOST:
+				// Persist any edited frame delay override (even if the dialog stays open)
+				{
+					char fdly_buf[16];
+					GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
+					p2p_frame_delay_override = atoi(fdly_buf);
+					nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
+				}
+				InitializeP2PSubsystem(hDlg, true);
+				break;
 		case IDC_ADD:
 			P2PStoredUsersListAdd();
 			break;
