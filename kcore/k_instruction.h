@@ -76,14 +76,15 @@ public:
         free (buffer);
     }
 
-    void clone(k_instruction * arg_0){
-        type = arg_0->type;
-        strcpy(user, arg_0->user);
-        buffer_len = arg_0->buffer_len;
-        buffer = (char*)malloc(buffer_len);
-        memcpy(buffer, arg_0->buffer, buffer_len);
-        buffer_pos = arg_0->buffer_pos;
-    }
+	    void clone(k_instruction * arg_0){
+	        type = arg_0->type;
+			strncpy(user, arg_0->user, 31);
+			user[31] = 0;
+	        buffer_len = arg_0->buffer_len;
+	        buffer = (char*)malloc(buffer_len);
+	        memcpy(buffer, arg_0->buffer, buffer_len);
+	        buffer_pos = arg_0->buffer_pos;
+	    }
 
     void ensure_sized(unsigned int arg_0){
         if (arg_0 > buffer_len) {
@@ -117,15 +118,48 @@ public:
         store_bytes(arg_0, (int)strlen(arg_0)+1);
     }
 
-    void load_str(char * arg_0, unsigned int arg_4){
-			size_t maxLen = strlen(buffer) + 1;
-			if (maxLen > (size_t)UINT_MAX)
-				maxLen = (size_t)UINT_MAX;
-			arg_4 = min(arg_4, (unsigned int)maxLen);
-        arg_4 = min(arg_4, buffer_pos+1);
-			load_bytes(arg_0, arg_4);
-			arg_0[arg_4] = 0x00;
-    }
+	    void load_str(char * arg_0, unsigned int arg_4){
+			if (arg_0 == NULL || arg_4 == 0) {
+				// Still consume the string bytes to keep the buffer aligned.
+				unsigned int nul_pos = 0;
+				while (nul_pos < buffer_pos && buffer[nul_pos] != 0)
+					nul_pos++;
+				unsigned int consume = (nul_pos < buffer_pos) ? (nul_pos + 1) : buffer_pos;
+				char scratch[256];
+				while (consume > 0) {
+					unsigned int chunk = min((unsigned int)sizeof(scratch), consume);
+					load_bytes(scratch, chunk);
+					consume -= chunk;
+				}
+				return;
+			}
+
+			// Find the NUL terminator within the available buffer.
+			unsigned int nul_pos = 0;
+			while (nul_pos < buffer_pos && buffer[nul_pos] != 0)
+				nul_pos++;
+
+			// Consume the entire string (including its NUL if present) to keep parsing aligned.
+			unsigned int consume = (nul_pos < buffer_pos) ? (nul_pos + 1) : buffer_pos;
+
+			// Copy as much as fits (leaving room for NUL).
+			unsigned int max_copy = arg_4 - 1;
+			unsigned int to_copy = min(max_copy, consume);
+			if (to_copy > 0)
+				load_bytes(arg_0, to_copy);
+
+			// Ensure NUL termination at the end of the destination buffer.
+			arg_0[min(to_copy, max_copy)] = 0;
+
+			// Skip any remaining bytes of the string that didn't fit in the destination.
+			unsigned int remaining = consume - to_copy;
+			char scratch[256];
+			while (remaining > 0) {
+				unsigned int chunk = min((unsigned int)sizeof(scratch), remaining);
+				load_bytes(scratch, chunk);
+				remaining -= chunk;
+			}
+	    }
 
     void store_int(const unsigned int x){
         store_bytes(&x, 4);
@@ -166,20 +200,43 @@ public:
 		return eax + ebx;
     }
 
-    void read_from_message(char * p_buffer, int p_buffer_len){
-        type = *(INSTRUCTION*)p_buffer++;
-		
-		unsigned int ul = (int)strlen(p_buffer);
-		int px = min(ul, 31);
-		
-		memcpy(user, p_buffer, px+1);
-		user[px] = 0;
-		p_buffer += ul + 1; 
-		
-        p_buffer_len -= (ul + 1);
-		
-        ensure_sized(p_buffer_len);
-        memcpy(buffer, p_buffer, p_buffer_len);
-		buffer_pos = p_buffer_len;
-    }
-};
+	    void read_from_message(char * p_buffer, int p_buffer_len){
+			if (p_buffer == NULL || p_buffer_len <= 0) {
+				type = INVDNONE;
+				user[0] = 0;
+				buffer_pos = 0;
+				if (buffer_len > 0)
+					buffer[0] = 0;
+				return;
+			}
+
+	        type = *(INSTRUCTION*)p_buffer++;
+			p_buffer_len -= 1;
+			
+			const char* nul = (const char*)memchr(p_buffer, 0, (size_t)max(p_buffer_len, 0));
+			if (!nul) {
+				// Malformed (no NUL terminator for username).
+				type = INVDNONE;
+				user[0] = 0;
+				buffer_pos = 0;
+				if (buffer_len > 0)
+					buffer[0] = 0;
+				return;
+			}
+
+			unsigned int ul = (unsigned int)(nul - p_buffer);
+			int px = min((int)ul, 31);
+			
+			memcpy(user, p_buffer, px);
+			user[px] = 0;
+			p_buffer += ul + 1;
+			p_buffer_len -= (int)ul + 1;
+			if (p_buffer_len < 0)
+				p_buffer_len = 0;
+			
+	        ensure_sized((unsigned int)p_buffer_len);
+	        if (p_buffer_len > 0)
+	            memcpy(buffer, p_buffer, p_buffer_len);
+			buffer_pos = p_buffer_len;
+	    }
+	};

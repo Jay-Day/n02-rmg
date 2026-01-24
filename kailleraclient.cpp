@@ -198,11 +198,12 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 			char GameName[128];
 			int timee;
 			
-		};
-		
-		strcpy(GameName, game);
-		
-		_lwrite(out, "KRC0", 4);
+			};
+			
+			strncpy(GameName, (game != NULL) ? game : "", sizeof(GameName) - 1);
+			GameName[sizeof(GameName) - 1] = 0;
+			
+			_lwrite(out, "KRC0", 4);
 		_lwrite(out, infos_copy.appName, 128);
 		_lwrite(out, GameName, 128);
 		time_t mytime = time(NULL);
@@ -456,12 +457,13 @@ extern "C" {
 #endif
 #endif
 	}
-		void KAILLERA_DLLEXP kailleraSetInfos(kailleraInfos *infos_){
-			infos = *infos_;
-			strncpy(APP, infos.appName, 127);
-			
-			if (gamelist != 0)
-				free(gamelist);
+			void KAILLERA_DLLEXP kailleraSetInfos(kailleraInfos *infos_){
+				infos = *infos_;
+				strncpy(APP, (infos.appName != NULL) ? infos.appName : "", 127);
+				APP[127] = 0;
+				
+				if (gamelist != 0)
+					free(gamelist);
 			gamelist = 0;
 			
 			char * xx = infos.gameList;

@@ -127,9 +127,11 @@ bool kaillera_core_initialize(int port, char * appname, char * username, char co
 	
 	KAILLERAC.PORT = port;
 	KAILLERAC.conset = connection_setting;
-	
-	strncpy(KAILLERAC.APP, appname, 128);
-	strncpy(KAILLERAC.USERNAME, username, 32);
+
+	strncpy(KAILLERAC.APP, (appname != NULL) ? appname : "", sizeof(KAILLERAC.APP) - 1);
+	KAILLERAC.APP[sizeof(KAILLERAC.APP) - 1] = 0;
+	strncpy(KAILLERAC.USERNAME, (username != NULL) ? username : "", sizeof(KAILLERAC.USERNAME) - 1);
+	KAILLERAC.USERNAME[sizeof(KAILLERAC.USERNAME) - 1] = 0;
 	
 	KAILLERAC.connection = new k_message;
 	if (!KAILLERAC.connection->initialize(KAILLERAC.PORT)){
@@ -151,9 +153,13 @@ int kaillera_core_get_port(){
 
 bool kaillera_core_connect(char * ip, int port){
 	
+	if (ip == NULL)
+		return false;
+
 	kaillera_core_debug("Connecting to %s:%i", ip, port);
 	
-	strncpy(KAILLERAC.IP, ip, 128);
+	strncpy(KAILLERAC.IP, (ip != NULL) ? ip : "", sizeof(KAILLERAC.IP) - 1);
+	KAILLERAC.IP[sizeof(KAILLERAC.IP) - 1] = 0;
 	
 	k_socket ksock;
 	ksock.initialize(0, 2048);
@@ -167,21 +173,33 @@ bool kaillera_core_connect(char * ip, int port){
 		
 		if (ksock.has_data()) {
 			
-			char srsp[256];
-			int srspl = 256;
-			sockaddr_in addr;
+				char srsp[257];
+				srsp[0] = 0;
+				int srspl = 256;
+				sockaddr_in addr;
 			
 			kaillera_core_debug("server replied");
 			
-			if (ksock.check_recv(srsp, &srspl, false, &addr)) {
-				if (strncmp("HELLOD00D", srsp, 9) == 0) {
-					
-					kaillera_core_debug("logging in");
-					
-					addr.sin_port = htons(atoi(srsp+9));
-					KAILLERAC.connection->set_addr(&addr);
-					KAILLERAC.USERSTAT = 1;
-					KAILLERAC.PLAYERSTAT = -1;
+				if (ksock.check_recv(srsp, &srspl, false, &addr)) {
+					if (srspl < 0)
+						srspl = 0;
+					if (srspl > 256)
+						srspl = 256;
+					srsp[srspl] = 0;
+
+					if (srspl >= 9 && strncmp("HELLOD00D", srsp, 9) == 0) {
+						
+						kaillera_core_debug("logging in");
+						
+						int server_port = atoi(srsp + 9);
+						if (server_port <= 0 || server_port > 65535) {
+							kaillera_error_callback("error connecting to server");
+							return false;
+						}
+						addr.sin_port = htons((u_short)server_port);
+						KAILLERAC.connection->set_addr(&addr);
+						KAILLERAC.USERSTAT = 1;
+						KAILLERAC.PLAYERSTAT = -1;
 					
 					k_instruction ki;
 					ki.type = USERLOGN;
@@ -192,12 +210,12 @@ bool kaillera_core_connect(char * ip, int port){
 					KAILLERAC.connection->send_instruction(&ki);
 
 					return true;
-				}
-			} else {
-				if (strcmp("TOO", srsp)==0) {
-					kaillera_error_callback("Server is full");
+					}
 				} else {
-					kaillera_error_callback("error connecting to server");
+					if (strcmp("TOO", srsp) == 0) {
+						kaillera_error_callback("Server is full");
+					} else {
+						kaillera_error_callback("error connecting to server");
 					//protocol different or unrecognized protocol
 				}
 			}
@@ -511,7 +529,8 @@ void kaillera_join_game(unsigned int id){
 	KAILLERAC.connection->send_instruction(&jog);;
 }
 void kaillera_create_game(char * name) {
-	strcpy(KAILLERAC.GAME, name);
+	strncpy(KAILLERAC.GAME, (name != NULL) ? name : "", sizeof(KAILLERAC.GAME) - 1);
+	KAILLERAC.GAME[sizeof(KAILLERAC.GAME) - 1] = 0;
 	KAILLERAC.game_id_requested = true;
 	KAILLERAC.has_dropped = false;
 	k_instruction cg;

@@ -31,29 +31,29 @@ static void UpdateModeRadioButtons(HWND hDlg){
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 void outp(char * line);
-void __cdecl outpf(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
+static void AppendP2PFormattedLine(char* fmt, va_list args) {
+	char msg[2048];
+	msg[0] = 0;
+	vsnprintf_s(msg, sizeof(msg), _TRUNCATE, fmt, args);
+
 	char ts[20];
 	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
+
+	char line[4096];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "%s%s\r\n", ts, msg);
+	outp(line);
+}
+void __cdecl outpf(char * arg_0, ...) {
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendP2PFormattedLine(arg_0, args);
 	va_end (args);
-	outp(V88);
 }
 void __cdecl p2p_core_debug(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendP2PFormattedLine(arg_0, args);
 	va_end (args);
-	outp(V88);
 }
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -155,7 +155,8 @@ int p2p_getSelectedDelay() {
 	return p2p_option_smoothing;
 }
 void p2p_game_callback(char * game, int playernop, int maxplayersp){
-	strcpy(GAME, game);
+	strncpy(GAME, (game != NULL) ? game : "", sizeof(GAME) - 1);
+	GAME[sizeof(GAME) - 1] = 0;
 	playerno = playernop;
 	numplayers = maxplayersp;
 	KSSDFA.input = KSSDFA_START_GAME;
@@ -347,21 +348,16 @@ void IniaialzeConnectionDialog(HWND hDlg){
 char peername[32];
 char peerapp[128];
 void p2p_peer_info_callback(char* p33rname, char* app) {
-	strcpy(peername, p33rname);
-	strcpy(peerapp, app);
+	strncpy(peername, (p33rname != NULL) ? p33rname : "", sizeof(peername) - 1);
+	peername[sizeof(peername) - 1] = 0;
+	strncpy(peerapp, (app != NULL) ? app : "", sizeof(peerapp) - 1);
+	peerapp[sizeof(peerapp) - 1] = 0;
 }
 
 void outp(char * line){
-	//kprintf(line);
-	CHARRANGE cr;
-	GETTEXTLENGTHEX gtx;
-	gtx.codepage = CP_ACP;
-	gtx.flags = GTL_PRECISE;
-	cr.cpMin = GetWindowTextLength(p2p_ui_con_richedit);//SendMessage(p2p_ui_con_richedit, EM_GETTEXTLENGTHEX, (WPARAM)&gtx, 0);
-	cr.cpMax = cr.cpMin;//+i;
-	SendMessage(p2p_ui_con_richedit, EM_EXSETSEL, 0, (LPARAM)&cr);
-	SendMessage(p2p_ui_con_richedit, EM_REPLACESEL, FALSE, (LPARAM)line);
-	SendMessage(p2p_ui_con_richedit, WM_VSCROLL, SB_BOTTOM, 0);
+	if (p2p_ui_con_richedit == NULL || line == NULL)
+		return;
+	re_append(p2p_ui_con_richedit, line, 0);
 }
 
 
@@ -683,7 +679,10 @@ void P2PSaveStoredUsersList(){
 /////////////////////////////////////////////////
 
 void p2p_hosted_game_callback(char * game){
-	strcpy(GAME, game);
+	if (game == NULL)
+		game = (char*)"";
+	strncpy(GAME, game, sizeof(GAME) - 1);
+	GAME[sizeof(GAME) - 1] = 0;
 	if (gamelist != 0) {
 		char * xx = gamelist;
 		size_t p;
@@ -732,14 +731,15 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 						xx += p + 1;
 					}
 				}
-				{
-					DWORD xxx = 32;
-					GetUserName(USERNAME, &xxx);
-					char un[128];
-					nSettings::get_str("IDC_USRNAME", un, USERNAME);
-					strncpy(USERNAME, un, 32);
-					SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
-				}
+					{
+						DWORD xxx = 32;
+						GetUserName(USERNAME, &xxx);
+						char un[128];
+						nSettings::get_str("IDC_USRNAME", un, USERNAME);
+						strncpy(USERNAME, un, 31);
+						USERNAME[31] = 0;
+						SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
+					}
 	
 				{
 					// Frame delay override (0 = auto-calculated)

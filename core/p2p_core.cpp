@@ -163,9 +163,12 @@ bool p2p_core_initialize(bool host, int port, char * appname, char * gamename, c
 
 	P2PCORE.HOST = host;
 	P2PCORE.PORT = port;
-	strncpy(P2PCORE.APP, appname, 128);
-	strncpy(P2PCORE.USERNAME, username, 32);
-	strncpy(P2PCORE.GAME, gamename, 128);
+	strncpy(P2PCORE.APP, (appname != NULL) ? appname : "", sizeof(P2PCORE.APP) - 1);
+	P2PCORE.APP[sizeof(P2PCORE.APP) - 1] = 0;
+	strncpy(P2PCORE.USERNAME, (username != NULL) ? username : "", sizeof(P2PCORE.USERNAME) - 1);
+	P2PCORE.USERNAME[sizeof(P2PCORE.USERNAME) - 1] = 0;
+	strncpy(P2PCORE.GAME, (gamename != NULL) ? gamename : "", sizeof(P2PCORE.GAME) - 1);
+	P2PCORE.GAME[sizeof(P2PCORE.GAME) - 1] = 0;
 
 	P2PCORE.connection = new p2p_message;
 	if (!P2PCORE.connection->initialize(P2PCORE.PORT)){
@@ -196,7 +199,10 @@ int p2p_core_get_port(){
 
 bool p2p_core_connect(char * ip, int port){
 	n02_TRACE();
-	strncpy(P2PCORE.IP, ip, 128);
+	if (ip == NULL)
+		return false;
+	strncpy(P2PCORE.IP, (ip != NULL) ? ip : "", sizeof(P2PCORE.IP) - 1);
+	P2PCORE.IP[sizeof(P2PCORE.IP) - 1] = 0;
 	if (!P2PCORE.HOST && P2PCORE.connection->set_address(ip, port)){
 		p2p_instruction contreq(LOGN, LOGN_REQ);
 		contreq.store_sstring(P2PCORE.USERNAME);
@@ -298,6 +304,8 @@ void p2p_ping(){
 }
 
 void p2p_send_chat(char * xxx){
+	if (xxx == NULL)
+		xxx = (char*)"";
 
 	p2p_chatstruct * ps = &p2p_chat_cache.items[p2p_chat_cache.length];
 	ps->crframeno = P2PCORE.frameno + P2PCORE.throughput + 2;
@@ -305,7 +313,8 @@ void p2p_send_chat(char * xxx){
 	if (p2p_chat_cache.length == 0)
 		P2PCORE.crframeno = ps->crframeno;
 
-	strncpy(ps->msg, xxx, min(251, strlen(xxx)+1));
+	strncpy(ps->msg, (xxx != NULL) ? xxx : "", sizeof(ps->msg) - 1);
+	ps->msg[sizeof(ps->msg) - 1] = 0;
 	ps->local = true;
 	p2p_chat_cache.length++;
 	
@@ -330,7 +339,7 @@ inline void p2p_handle_chat_instruction(p2p_instruction * ki){
 
 	pc->local = false;
 
-	ki->load_vstring(pc->msg);
+	ki->load_vstring(pc->msg, (unsigned int)sizeof(pc->msg));
 
 	p2p_chat_cache.length++;
 
@@ -899,4 +908,3 @@ int p2p_modify_play_values(void *values, int size){
 		
 	}
 }
-

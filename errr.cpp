@@ -24,16 +24,12 @@
 void __cdecl kprintf(char * arg_0, ...) {
 	//print on console
 #if 1
-	char V8[1024];
 	char V88[2048];
-
-	//nsprintf(V8, "%s\r\n",arg_0);
-	//nvsprintf(V88, V8, &arg_0);
-	//nprintf(V88);
-	sprintf(V8, "%s",arg_0);
 	va_list args;
 	va_start(args, arg_0);
-	vsprintf (V88, V8, args);
+	V88[0] = 0;
+	if (arg_0 != NULL)
+		vsnprintf_s(V88, sizeof(V88), _TRUNCATE, arg_0, args);
 	va_end(args);
 
 	//log to file

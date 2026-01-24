@@ -65,25 +65,33 @@ public:
 		//kx.to_string();
     }
 
-	void send_ssrv(char * bf, int bflen, sockaddr_in * arg_addr){
-		sockaddr_in sad = addr;
-		set_addr(arg_addr);
-		char bufferr[1000];
-		bufferr[0] = 0;
-		memcpy(&bufferr[1], bf, bflen);
-		k_socket::send(bufferr, bflen+1);
-		set_addr(&sad);
-    }
+		void send_ssrv(char * bf, int bflen, sockaddr_in * arg_addr){
+			sockaddr_in sad = addr;
+			set_addr(arg_addr);
+			char bufferr[1000];
+			if (bflen < 0 || bflen > (int)sizeof(bufferr) - 1) {
+				set_addr(&sad);
+				return;
+			}
+			bufferr[0] = 0;
+			memcpy(&bufferr[1], bf, bflen);
+			k_socket::send(bufferr, bflen+1);
+			set_addr(&sad);
+	    }
 
-	void send_ssrv(char * bf, int bflen, char * host, int port){
-		sockaddr_in sad = addr;
-		set_address(host, port);
-		char bufferr[1000];
-		bufferr[0] = 0;
-		memcpy(&bufferr[1], bf, bflen);
-		k_socket::send(bufferr, bflen+1);
-		set_addr(&sad);
-    }
+		void send_ssrv(char * bf, int bflen, char * host, int port){
+			sockaddr_in sad = addr;
+			set_address(host, port);
+			char bufferr[1000];
+			if (bflen < 0 || bflen > (int)sizeof(bufferr) - 1) {
+				set_addr(&sad);
+				return;
+			}
+			bufferr[0] = 0;
+			memcpy(&bufferr[1], bf, bflen);
+			k_socket::send(bufferr, bflen+1);
+			set_addr(&sad);
+	    }
 
 	bool has_ssrv(){
 		return ssrv_cache.length > 0;
@@ -119,28 +127,33 @@ public:
         return true;
     }
 
-    bool send_message(int limit){
-        char buf[0x1000];
-        int len = 1;
-        char * buff = buf;
-        char max_t = min(out_cache.size(), limit);
-        *buff++ = max_t;
-		////kprintf(__FILE__ "%i", out_cache.size());
-        if(max_t > 0) {
-            for (int i = 0; i < max_t; i++) {
-                int cache_index = out_cache.size() - i -1;
-                *(p2p_instruction_head*)buff = out_cache[cache_index].head;
-                buff += sizeof(p2p_instruction_head);
-                int l;
-                memcpy(buff, out_cache[cache_index].body, l = out_cache[cache_index].head.length);
-                buff += l;
-                len += l + sizeof(p2p_instruction_head);
-            }
-        }
-		if (dsc>0)
-			dsc--;
-		else
-			k_socket::send(buf, len);
+	    bool send_message(int limit){
+	        char buf[0x1000];
+	        int len = 1;
+	        char * buff = buf + 1;
+	        char max_t = min(out_cache.size(), limit);
+			char sent_t = 0;
+			////kprintf(__FILE__ "%i", out_cache.size());
+	        if(max_t > 0) {
+	            for (int i = 0; i < max_t; i++) {
+	                int cache_index = out_cache.size() - i -1;
+	                *(p2p_instruction_head*)buff = out_cache[cache_index].head;
+	                buff += sizeof(p2p_instruction_head);
+	                int l;
+					l = out_cache[cache_index].head.length;
+					if ((size_t)len + sizeof(p2p_instruction_head) + (size_t)l > sizeof(buf))
+						break;
+	                memcpy(buff, out_cache[cache_index].body, l);
+	                buff += l;
+	                len += l + sizeof(p2p_instruction_head);
+					sent_t++;
+	            }
+	        }
+			buf[0] = sent_t;
+			if (dsc>0)
+				dsc--;
+			else
+				k_socket::send(buf, len);
         return true;
     }
 
@@ -168,95 +181,173 @@ public:
 		return false;
     }
 
-	bool check_recvx (char* buf, int * len){
-        if (has_data_waiting) {
-			sockaddr_in addrp;
-            char buff      [2024];
-            int  bufflen = 2024;
-            if (k_socket::check_recv(buff, &bufflen, false, &addrp) && (addrp.sin_addr.s_addr == addr.sin_addr.s_addr)) {
-                unsigned char instruction_count = *buff;
-                char* ptr = buff + 1;
-                if (instruction_count > 0 && instruction_count < 15) {
-					unsigned char latest_serial = *ptr;
-					int si = in_cache.size();
-					unsigned char tx = latest_serial-last_cached_instruction;
-                    if (tx > 0 && tx < 15) {
-    					in_cache.set_size(si+tx);
-                        for (int u=0; u<instruction_count; u++) {
-    						unsigned char serial = ((p2p_instruction_head*)ptr)->serial;
-                            unsigned char length = ((p2p_instruction_head*)ptr)->length;
-    						ptr += sizeof(p2p_instruction_head);
-                            if (serial == last_cached_instruction)
-                                break;
-    						unsigned char cix = serial - last_cached_instruction;
-    						PACKETLOSSCOUNT += cix - 1;
-    						int ind = si + (cix) - 1;
-    						in_cache.items[ind].head.serial = serial;
-    						in_cache.items[ind].head.length = length;
-                            memcpy(in_cache.items[ind].body, ptr, length);
-                            ptr += length;
-                        }
-    					last_cached_instruction = latest_serial;
-                    } else if (tx==0) SOCK_RECV_RETR++; else PACKETMISOTDERCOUNT++;
-                }
-            }
-        }
-        if (in_cache.size() > 0) {
-			*len = in_cache[0].head.length;
-			memcpy(buf, in_cache[0].body, *len);
-			last_processed_instruction = in_cache[0].head.serial;
-			in_cache.removei(0);
+		bool check_recvx (char* buf, int * len){
+	        if (has_data_waiting) {
+				sockaddr_in addrp;
+	            char buff      [2024];
+	            int  bufflen = 2024;
+	            if (k_socket::check_recv(buff, &bufflen, false, &addrp) &&
+					(addrp.sin_addr.s_addr == addr.sin_addr.s_addr) &&
+					(addrp.sin_port == addr.sin_port)) {
+	                unsigned char instruction_count = *buff;
+	                char* ptr = buff + 1;
+					const char* end = buff + bufflen;
+	                if (instruction_count > 0 && instruction_count < 15 && ptr < end) {
+						if ((size_t)(end - ptr) < sizeof(p2p_instruction_head))
+							goto recvx_done;
+						unsigned char latest_serial = *ptr;
+						int si = in_cache.size();
+						unsigned char tx = latest_serial-last_cached_instruction;
+	                    if (tx > 0 && tx < 15) {
+							if (si < 0 || si > ICACHESIZE) {
+								in_cache.clear();
+								si = 0;
+							}
+							if (si + (int)tx > ICACHESIZE) {
+								in_cache.clear();
+								si = 0;
+							}
+	    					in_cache.set_size(si+tx);
+							for (int i = si; i < si + (int)tx; i++) {
+								in_cache.items[i].head.serial = 0;
+								in_cache.items[i].head.length = 0;
+							}
+	                        for (int u=0; u<instruction_count; u++) {
+								if ((size_t)(end - ptr) < sizeof(p2p_instruction_head))
+									break;
+	    						unsigned char serial = ((p2p_instruction_head*)ptr)->serial;
+	                            unsigned char length = ((p2p_instruction_head*)ptr)->length;
+	    						ptr += sizeof(p2p_instruction_head);
+	                            if (serial == last_cached_instruction)
+	                                break;
+								if ((size_t)(end - ptr) < (size_t)length)
+									break;
+	    						unsigned char cix = serial - last_cached_instruction;
+								if (cix == 0 || cix > tx) {
+									ptr += length;
+									continue;
+								}
+	    						PACKETLOSSCOUNT += cix - 1;
+	    						int ind = si + (cix) - 1;
+								if (ind < 0 || ind >= ICACHESIZE) {
+									ptr += length;
+									continue;
+								}
+	    						in_cache.items[ind].head.serial = serial;
+	    						in_cache.items[ind].head.length = length;
+	                            memcpy(in_cache.items[ind].body, ptr, length);
+	                            ptr += length;
+	                        }
+	    					last_cached_instruction = latest_serial;
+	                    } else if (tx==0) SOCK_RECV_RETR++; else PACKETMISOTDERCOUNT++;
+	                }
+	            }
+	        }
+recvx_done:
+	        if (in_cache.size() > 0) {
+				if (*len <= 0)
+					return false;
+				if ((int)in_cache[0].head.length > *len)
+					return false;
+				*len = in_cache[0].head.length;
+				memcpy(buf, in_cache[0].body, *len);
+				last_processed_instruction = in_cache[0].head.serial;
+				in_cache.removei(0);
 			return true;
         }
         return false;
     }
 
-    bool check_recv (char* buf, int * len, bool leave_in_queue, sockaddr_in* addrp){
-        if (has_data_waiting) {
-            char buff      [2024];
-            int  bufflen = 2024;
-            if (k_socket::check_recv(buff, &bufflen, false, addrp)) {
-                unsigned char instruction_count = *buff;
-                char* ptr = buff + 1;
-                if (instruction_count > 0 && instruction_count < 15) {
-					unsigned char latest_serial = *ptr;
-					int si = in_cache.size();
-					unsigned char tx = latest_serial-last_cached_instruction;
-                    if (tx > 0 && tx < 15) {
-    					in_cache.set_size(si+tx);
-                        for (int u=0; u<instruction_count; u++) {
-    						unsigned char serial = ((p2p_instruction_head*)ptr)->serial;
-                            unsigned char length = ((p2p_instruction_head*)ptr)->length;
-    						ptr += sizeof(p2p_instruction_head);
-                            if (serial == last_cached_instruction)
-                                break;
-    						unsigned char cix = serial - last_cached_instruction;
-    						PACKETLOSSCOUNT += cix - 1;
-    						int ind = si + (cix) - 1;
-    						in_cache.items[ind].head.serial = serial;
-    						in_cache.items[ind].head.length = length;
-                            memcpy(in_cache.items[ind].body, ptr, length);
-                            ptr += length;
-                        }
-    					last_cached_instruction = latest_serial;
-                    } else if (tx==0) SOCK_RECV_RETR++; else PACKETMISOTDERCOUNT++;
-                } else {
-					if (instruction_count == 0 && bufflen > 5) {
-						char * inb = (char*)malloc(bufflen+1+sizeof(sockaddr_in));
-						*((short*)inb) = bufflen-1;
-						*((struct sockaddr_in*)(inb+2)) = *addrp;
-						memcpy(inb+2+sizeof(sockaddr_in), buff+1, bufflen);
-						ssrv_cache.add(inb);
+	    bool check_recv (char* buf, int * len, bool leave_in_queue, sockaddr_in* addrp){
+	        if (has_data_waiting) {
+	            char buff      [2024];
+	            int  bufflen = 2024;
+	            if (k_socket::check_recv(buff, &bufflen, false, addrp)) {
+	                unsigned char instruction_count = *buff;
+	                char* ptr = buff + 1;
+					const char* end = buff + bufflen;
+	                if (instruction_count > 0 && instruction_count < 15 && ptr < end) {
+						// Ignore spoofed/unexpected game packets (P2P is not authenticated).
+						if (addrp != NULL && (addrp->sin_addr.s_addr != addr.sin_addr.s_addr || addrp->sin_port != addr.sin_port))
+							goto recv_done;
+						if ((size_t)(end - ptr) < sizeof(p2p_instruction_head))
+							goto recv_done;
+						unsigned char latest_serial = *ptr;
+						int si = in_cache.size();
+						unsigned char tx = latest_serial-last_cached_instruction;
+	                    if (tx > 0 && tx < 15) {
+							if (si < 0 || si > ICACHESIZE) {
+								in_cache.clear();
+								si = 0;
+							}
+							if (si + (int)tx > ICACHESIZE) {
+								in_cache.clear();
+								si = 0;
+							}
+	    					in_cache.set_size(si+tx);
+							for (int i = si; i < si + (int)tx; i++) {
+								in_cache.items[i].head.serial = 0;
+								in_cache.items[i].head.length = 0;
+							}
+	                        for (int u=0; u<instruction_count; u++) {
+								if ((size_t)(end - ptr) < sizeof(p2p_instruction_head))
+									break;
+	    						unsigned char serial = ((p2p_instruction_head*)ptr)->serial;
+	                            unsigned char length = ((p2p_instruction_head*)ptr)->length;
+	    						ptr += sizeof(p2p_instruction_head);
+	                            if (serial == last_cached_instruction)
+	                                break;
+								if ((size_t)(end - ptr) < (size_t)length)
+									break;
+	    						unsigned char cix = serial - last_cached_instruction;
+								if (cix == 0 || cix > tx) {
+									ptr += length;
+									continue;
+								}
+	    						PACKETLOSSCOUNT += cix - 1;
+	    						int ind = si + (cix) - 1;
+								if (ind < 0 || ind >= ICACHESIZE) {
+									ptr += length;
+									continue;
+								}
+	    						in_cache.items[ind].head.serial = serial;
+	    						in_cache.items[ind].head.length = length;
+	                            memcpy(in_cache.items[ind].body, ptr, length);
+	                            ptr += length;
+	                        }
+	    					last_cached_instruction = latest_serial;
+	                    } else if (tx==0) SOCK_RECV_RETR++; else PACKETMISOTDERCOUNT++;
+	                } else {
+						if (instruction_count == 0 && bufflen > 5) {
+							const int payload_len = bufflen - 1;
+							if (payload_len > 0) {
+								const size_t alloc_size = 2 + sizeof(sockaddr_in) + (size_t)payload_len;
+								char* inb = (char*)malloc(alloc_size);
+								if (inb) {
+									*((short*)inb) = (short)payload_len;
+									if (addrp)
+										*((struct sockaddr_in*)(inb + 2)) = *addrp;
+									else
+										memset(inb + 2, 0, sizeof(sockaddr_in));
+									memcpy(inb + 2 + sizeof(sockaddr_in), buff + 1, payload_len);
+									ssrv_cache.add(inb);
+								}
+							}
+						}
 					}
-				}
-            }
-        }
-        if (in_cache.size() > 0) {
-			*len = in_cache[0].head.length;
-			memcpy(buf, in_cache[0].body, *len);
-			if(!leave_in_queue) {
-				last_processed_instruction = in_cache[0].head.serial;
-				in_cache.removei(0);
+	            }
+	        }
+recv_done:
+	        if (in_cache.size() > 0) {
+				if (*len <= 0)
+					return false;
+				if ((int)in_cache[0].head.length > *len)
+					return false;
+				*len = in_cache[0].head.length;
+				memcpy(buf, in_cache[0].body, *len);
+				if(!leave_in_queue) {
+					last_processed_instruction = in_cache[0].head.serial;
+					in_cache.removei(0);
 			}
 			return true;
         }

@@ -19,10 +19,8 @@ void p2p_instruction::to_string () {
 }
 
 void p2p_instruction::to_string (char*){
-	char * ITYPES[] = {"LOGN", "PING", "PREADY", "TSYNC", "TTIME", "LOAD", "START", "DATA", "DROP", "CHAT", "EXIT"};
-	int f = inst.flags;
-	int t = inst.type;
-	sprintf("p2p_instruction {%s, %i}", ITYPES[t], f);
+	// Debug helper (currently unused). Intentionally left as a no-op to avoid
+	// unsafe writes into unknown buffers.
 }
 
 p2p_instruction::p2p_instruction(){
@@ -60,7 +58,19 @@ void p2p_instruction::store_sstring(const char * arg_0){
 	store_bytes(arg_0, 32);
 }
 void p2p_instruction::store_vstring(const char * arg_0){
-	store_bytes(arg_0, min(strlen(arg_0)+1,251));
+	if (arg_0 == NULL) {
+		char nul = 0;
+		store_bytes(&nul, 1);
+		return;
+	}
+
+	// vstring is NUL-terminated and capped to 251 bytes (including the NUL).
+	int copy_len = 0;
+	while (copy_len < 250 && arg_0[copy_len] != 0)
+		copy_len++;
+	store_bytes(arg_0, copy_len);
+	char nul = 0;
+	store_bytes(&nul, 1);
 }
 void p2p_instruction::store_mstring(const char * arg_0){
 	store_bytes(arg_0, 64);
@@ -102,10 +112,32 @@ void p2p_instruction::load_sstring(char * arg_0){
 	load_bytes(arg_0, 32);
 	arg_0[31] = 0;
 }
-void p2p_instruction::load_vstring(char* arg_0) {
-	unsigned char sl = min((unsigned char)(strlen((char*)&inst.body[pos]) + 1), 256 - pos);
-	load_bytes(arg_0, sl);
-	arg_0[sl - 1] = 0;
+void p2p_instruction::load_vstring(char* arg_0, unsigned int arg_4) {
+	if (arg_0 == NULL || arg_4 == 0) {
+		// Skip the string to keep parsing aligned.
+		unsigned int remaining = (pos <= len) ? (unsigned int)(len - pos) : 0;
+		unsigned int nul_pos = 0;
+		while (nul_pos < remaining && inst.body[pos + nul_pos] != 0)
+			nul_pos++;
+		unsigned int consume = (nul_pos < remaining) ? (nul_pos + 1) : remaining;
+		pos = (unsigned char)min((unsigned int)len, (unsigned int)pos + consume);
+		return;
+	}
+
+	unsigned int remaining = (pos <= len) ? (unsigned int)(len - pos) : 0;
+	unsigned int nul_pos = 0;
+	while (nul_pos < remaining && inst.body[pos + nul_pos] != 0)
+		nul_pos++;
+
+	unsigned int consume = (nul_pos < remaining) ? (nul_pos + 1) : remaining;
+	unsigned int max_copy = arg_4 - 1;
+	unsigned int to_copy = min(max_copy, consume);
+
+	if (to_copy > 0)
+		memcpy(arg_0, &inst.body[pos], to_copy);
+	arg_0[min(to_copy, max_copy)] = 0;
+
+	pos = (unsigned char)min((unsigned int)len, (unsigned int)pos + consume);
 }
 int p2p_instruction::load_int(){
 	int x;
@@ -145,9 +177,21 @@ int p2p_instruction::write_to_message(char * arg_0){
 }
 
 void p2p_instruction::read_from_message(char * p_buffer, int p_buffer_len){
+	if (p_buffer == NULL || p_buffer_len <= 0) {
+		memset(&inst, 0, sizeof(inst));
+		pos = 0;
+		len = 0;
+		return;
+	}
+
 	*((char*)&inst) = *p_buffer++;
-	len = p_buffer_len -1;
-	memcpy(&inst.body, p_buffer, len);
+	int payload_len = p_buffer_len - 1;
+	if (payload_len < 0)
+		payload_len = 0;
+	if (payload_len > 255)
+		payload_len = 255;
+	len = (unsigned char)payload_len;
+	if (payload_len > 0)
+		memcpy(&inst.body, p_buffer, payload_len);
 	pos = 0;
 }
-

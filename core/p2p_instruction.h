@@ -105,8 +105,8 @@ public:
     void load_sstring(char * arg_0);
 	void store_mstring(const char * arg_0);
     void load_mstring(char * arg_0);
-	void store_vstring(const char * arg_0);
-	void load_vstring(char * arg_0);	
+		void store_vstring(const char * arg_0);
+		void load_vstring(char * arg_0, unsigned int arg_4);
 
 	//void store_xstring(const char * arg_0);
     //void load_xstring(char * arg_0);

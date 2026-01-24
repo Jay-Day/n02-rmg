@@ -318,124 +318,78 @@ void kaillera_goutp(char * line){
 static const COLORREF KAILLERA_COLOR_GREEN = 0x00009900; // matches kaillera_ui_motd()
 static const COLORREF KAILLERA_COLOR_DARK_BLUE = RGB(0, 0, 102); // join/leave in lobby chat
 
+static void AppendFormattedLine(HWND hwnd, COLORREF color, char* fmt, va_list args) {
+	char msg[2048];
+	msg[0] = 0;
+	vsnprintf_s(msg, sizeof(msg), _TRUNCATE, fmt, args);
 
-void __cdecl kaillera_gdebug(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
 	char ts[20];
 	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
+
+	char line[4096];
+	_snprintf_s(line, sizeof(line), _TRUNCATE, "%s%s\r\n", ts, msg);
+	re_append(hwnd, line, color);
+}
+
+
+void __cdecl kaillera_gdebug(char * arg_0, ...) {
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_RE_GCHAT, 0x00000000, arg_0, args);
 	va_end (args);
-	kaillera_goutp(V88);
 }
 
 void __cdecl kaillera_gdebug_color(COLORREF color, char* arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start(args, arg_0);
-	vsprintf(V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_RE_GCHAT, color, arg_0, args);
 	va_end(args);
-	re_append(kaillera_sdlg_RE_GCHAT, V88, color);
 }
 void __cdecl kaillera_ui_gdebug(char* arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start(args, arg_0);
-	vsprintf(V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_RE_GCHAT, 0x00000000, arg_0, args);
 	va_end(args);
-
-	re_append(kaillera_sdlg_RE_GCHAT, V88, 0x00000000);
 }
 
 void __cdecl kaillera_ui_gdebug_color(COLORREF color, char* arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start(args, arg_0);
-	vsprintf(V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_RE_GCHAT, color, arg_0, args);
 	va_end(args);
-
-	re_append(kaillera_sdlg_RE_GCHAT, V88, color);
 }
 
 void __cdecl kaillera_core_debug(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_partchat, 0x00FF0000, arg_0, args);
 	va_end (args);
-	re_append(kaillera_sdlg_partchat, V88, 0x00FF0000);
 }
 void __cdecl kaillera_ui_motd(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_partchat, KAILLERA_COLOR_GREEN, arg_0, args);
 	va_end (args);
-	re_append(kaillera_sdlg_partchat, V88, 0x00009900);  // Green
 }
 void __cdecl kaillera_error_callback(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_partchat, 0x000000FF, arg_0, args);
 	va_end (args);
-
-	re_append(kaillera_sdlg_partchat, V88, 0x000000FF);
 }
 
 void __cdecl kaillera_ui_debug(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_partchat, 0x00000000, arg_0, args);
 	va_end (args);
-
-	re_append(kaillera_sdlg_partchat, V88, 0x00000000);
 }
 
 void __cdecl kaillera_outpf(char * arg_0, ...) {
-	char V8[1024];
-	char V88[2084];
-	char ts[20];
-	get_timestamp(ts, sizeof(ts));
-	sprintf(V8, "%s%s\r\n", ts, arg_0);
 	va_list args;
 	va_start (args, arg_0);
-	vsprintf (V88, V8, args);
+	AppendFormattedLine(kaillera_sdlg_partchat, 0x00000000, arg_0, args);
 	va_end (args);
-
-	re_append(kaillera_sdlg_partchat, V88, 0x00000000);
 }
 
 
@@ -499,11 +453,12 @@ void kaillera_motd_callback(char*name, char * msg){
 
 	if (is_pm) {
 		// Display private messages in bright green
-		char V88[2084];
 		char ts[20];
 		get_timestamp(ts, sizeof(ts));
-		sprintf(V88, "%s- %s\r\n", ts, msg);
-		re_append(kaillera_sdlg_partchat, V88, 0x00009900);  // Green
+
+		char line[4096];
+		_snprintf_s(line, sizeof(line), _TRUNCATE, "%s- %s\r\n", ts, msg);
+		re_append(kaillera_sdlg_partchat, line, KAILLERA_COLOR_GREEN);
 	} else {
 		kaillera_ui_motd("- %s", msg);
 	}
@@ -622,7 +577,10 @@ void kaillera_player_dropped_callback(char * user, int gdpl){
 }
 void kaillera_game_callback(char * game, char player, char players){
 	if (game!= 0)
-		strcpy(GAME, game);
+	{
+		strncpy(GAME, game, sizeof(GAME) - 1);
+		GAME[sizeof(GAME) - 1] = 0;
+	}
 	playerno = player;
 	numplayers = players;
 	kaillera_gdebug("* Starting: %s (%i/%i)", GAME, playerno, numplayers);
@@ -708,10 +666,11 @@ void kailelra_sdlg_join_selected_game(){
 		kaillera_sdlg_gameslv.CheckRow(temp, 128, 0, sel);
 		char * cx = gamelist;
 		while (*cx != 0) {
-			if (strcmp(cx, temp) == 0) {
-				strcpy(GAME, temp);
-				kaillera_sdlg_gameslv.CheckRow(temp, 128, 1, sel);
-				if (strcmp(temp, APP) != 0) {
+				if (strcmp(cx, temp) == 0) {
+					strncpy(GAME, temp, sizeof(GAME) - 1);
+					GAME[sizeof(GAME) - 1] = 0;
+					kaillera_sdlg_gameslv.CheckRow(temp, 128, 1, sel);
+					if (strcmp(temp, APP) != 0) {
 					if (MessageBox(kaillera_sdlg, "Emulator/version mismatch and the game may desync.\nDo you want to continue?", "Error", MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
 						return;
 				}
@@ -750,12 +709,13 @@ void kaillera_sdlg_show_games_list_menu(HWND handle, bool incjoin = false){
 			kailelra_sdlg_join_selected_game();
 		} else if (result >= MENU_ID_CREATE_BASE) {
 			if (!inGame) {
-				// Get the game name from the submenu item
-				char gameName[256];
-				GetMenuStringA(kaillera_sdlg_CreateGamesMenu, result, gameName, sizeof(gameName), MF_BYCOMMAND);
-				strcpy(GAME, gameName);
-				kaillera_create_game(GAME);
-			}
+					// Get the game name from the submenu item
+					char gameName[256];
+					GetMenuStringA(kaillera_sdlg_CreateGamesMenu, result, gameName, sizeof(gameName), MF_BYCOMMAND);
+					strncpy(GAME, gameName, sizeof(GAME) - 1);
+					GAME[sizeof(GAME) - 1] = 0;
+					kaillera_create_game(GAME);
+				}
 		}
 	}
 }
@@ -1194,16 +1154,18 @@ static void UpdateModeRadioButtons(HWND hDlg){
 void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 	KAILLERA_CORE_INITIALIZED = true;
 
-	strcpy(kaillera_sdlg_NAME, name);
+	strncpy(kaillera_sdlg_NAME, (name != NULL) ? name : "", sizeof(kaillera_sdlg_NAME) - 1);
+	kaillera_sdlg_NAME[sizeof(kaillera_sdlg_NAME) - 1] = 0;
 
 	char un[32];
 	GetWindowText(GetDlgItem(kaillera_ssdlg, IDC_USRNAME), un, 32);
 	un[31]=0;
 	const char conset = 1; // Always treat as LAN (highest packet rate)
-	if (kaillera_core_initialize(0, APP, un, conset)) {
-		//Sleep(150);
-		kaillera_sdlg_port = port;
-		strcpy(kaillera_sdlg_ip, ip);
+		if (kaillera_core_initialize(0, APP, un, conset)) {
+			//Sleep(150);
+			kaillera_sdlg_port = port;
+			strncpy(kaillera_sdlg_ip, (ip != NULL) ? ip : "", sizeof(kaillera_sdlg_ip) - 1);
+			kaillera_sdlg_ip[sizeof(kaillera_sdlg_ip) - 1] = 0;
 
 		// Hide the server selection dialog (and intermediate dialog if different)
 		ShowWindow(kaillera_ssdlg, SW_HIDE);
@@ -1332,8 +1294,10 @@ void KLSListAdd(){
 
 
 void KLSListAdd(char * name, char * hostt){
-	strncpy(KLSNST_temp.servname, name, 127);
-	strncpy(KLSNST_temp.hostname, hostt, 127);
+	strncpy(KLSNST_temp.servname, (name != NULL) ? name : "", sizeof(KLSNST_temp.servname) - 1);
+	KLSNST_temp.servname[sizeof(KLSNST_temp.servname) - 1] = 0;
+	strncpy(KLSNST_temp.hostname, (hostt != NULL) ? hostt : "", sizeof(KLSNST_temp.hostname) - 1);
+	KLSNST_temp.hostname[sizeof(KLSNST_temp.hostname) - 1] = 0;
 	KLSList.add(KLSNST_temp);
 	KLSListSave();
 	KLSListDisplay();
@@ -1599,15 +1563,16 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 				  }
 			*/
 			
-			{
-				DWORD xxx = 32;
-				char USERNAME[32];
-				GetUserName(USERNAME, &xxx);
-				char un[128];
-				nSettings::get_str("USRN", un, USERNAME);
-				strncpy(USERNAME, un, 32);
-				SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
-			}
+				{
+					DWORD xxx = 32;
+					char USERNAME[32];
+					GetUserName(USERNAME, &xxx);
+					char un[128];
+					nSettings::get_str("USRN", un, USERNAME);
+					strncpy(USERNAME, un, 31);
+					USERNAME[31] = 0;
+					SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
+				}
 			
 				{
 					// Frame delay override (0 = use server value)

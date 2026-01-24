@@ -182,9 +182,6 @@ public:
 		crf.dwEffects = 0;  // Clear CFE_AUTOCOLOR
 		crf.crTextColor = color;
 
-		// Apply formatting before and after insertion. Some rich edit versions (and some DPI /
-		// monitor transitions) are finicky about persisting color on inserted text unless this
-		// is done.
 		SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
 		SendMessage(hwnd, EM_REPLACESEL, FALSE, (LPARAM)line);
 		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
@@ -201,5 +198,7 @@ inline void get_timestamp(char* buffer, size_t size) {
 	int hour = st.wHour % 12;
 	if (hour == 0) hour = 12;
 	const char* ampm = (st.wHour >= 12) ? "PM" : "AM";
-	sprintf(buffer, "[%d:%02d %s] ", hour, st.wMinute, ampm);
+	if (size == 0)
+		return;
+	_snprintf_s(buffer, size, _TRUNCATE, "[%d:%02d %s] ", hour, st.wMinute, ampm);
 }
