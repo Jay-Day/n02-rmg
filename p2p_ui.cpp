@@ -152,7 +152,8 @@ void p2p_chat_callback(char * nick, char * msg){
 	//return true;
 //}
 int p2p_getSelectedDelay() {
-	return p2p_option_smoothing;
+	// "Host smoothing" UI removed; always treat as None.
+	return 0;
 }
 void p2p_game_callback(char * game, int playernop, int maxplayersp){
 	strncpy(GAME, (game != NULL) ? game : "", sizeof(GAME) - 1);
@@ -306,8 +307,8 @@ void IniaialzeConnectionDialog(HWND hDlg){
 		ShowWindow(GetDlgItem(hDlg, CHK_ENLISTF), HOST ? SW_SHOW : SW_HIDE);
 		ShowWindow(GetDlgItem(hDlg, IDC_SSERV_WHATSMYIP), HOST ? SW_SHOW : SW_HIDE);
 		ShowWindow(GetDlgItem(hDlg, IDC_HOSTT), HOST ? SW_SHOW : SW_HIDE);
-		ShowWindow(GetDlgItem(hDlg, IDC_SMOOTHING), HOST ? SW_SHOW : SW_HIDE);
-		ShowWindow(GetDlgItem(hDlg, CMB_DMODE), HOST ? SW_SHOW : SW_HIDE);
+		ShowWindow(GetDlgItem(hDlg, IDC_P2P_FDLY_LBL), HOST ? SW_SHOW : SW_HIDE);
+		ShowWindow(GetDlgItem(hDlg, IDC_P2P_FDLY), HOST ? SW_SHOW : SW_HIDE);
 		
 		if (HOST) {
 			outpf("Hosting %s on port %i", GAME, p2p_core_get_port());
@@ -367,14 +368,20 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 	switch (uMsg) {
 	case WM_INITDIALOG:
 		{
-			{
-				HWND p2p_ui_cdlg_CMB_DMODE = GetDlgItem(hDlg, CMB_DMODE);
-				SendMessage(p2p_ui_cdlg_CMB_DMODE, CB_ADDSTRING, 0, (WPARAM)"None");
-				SendMessage(p2p_ui_cdlg_CMB_DMODE, CB_ADDSTRING, 0, (WPARAM)"If near");
-				SendMessage(p2p_ui_cdlg_CMB_DMODE, CB_ADDSTRING, 0, (WPARAM)"Always");
-				SendMessage(p2p_ui_cdlg_CMB_DMODE, CB_ADDSTRING, 0, (WPARAM)"Extra");
-				SendMessage(p2p_ui_cdlg_CMB_DMODE, CB_SETCURSEL, 0, 0);
+			// "Host smoothing" UI removed; always treat as None.
+			p2p_option_smoothing = 0;
+
+			// Load frame delay override (0 = auto-calculated)
+			p2p_frame_delay_override = nSettings::get_int("P2P_FDLY", 0);
+			if (p2p_frame_delay_override == 0) {
+				SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), "");
+			} else {
+				char fdly_str[16];
+				sprintf(fdly_str, "%d", p2p_frame_delay_override);
+				SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_str);
 			}
+			SendMessage(GetDlgItem(hDlg, IDC_P2P_FDLY), EM_LIMITTEXT, 2, 0);
+
 			p2p_ui_con_richedit = GetDlgItem(hDlg, IDC_RICHEDIT2);
 			p2p_ui_con_chatinp = GetDlgItem(hDlg, IDC_CHATI);
 			IniaialzeConnectionDialog(hDlg);
@@ -385,6 +392,13 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 		break;
 	case WM_CLOSE:
 		if (p2p_disconnect()){
+			// Save frame delay override
+			{
+				char fdly_buf[16];
+				GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
+				p2p_frame_delay_override = atoi(fdly_buf);
+				nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
+			}
 
 			if (SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
 				p2p_ssrv_unenlistgame();
@@ -433,6 +447,13 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 	case WM_COMMAND:
 		////kprintf(__FILE__ ":%i", __LINE__);//localhost:27888
 		switch (LOWORD(wParam)) {
+		case IDC_P2P_FDLY:
+			if (HIWORD(wParam) == EN_CHANGE) {
+				char fdly_buf[16];
+				GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
+				p2p_frame_delay_override = atoi(fdly_buf);
+			}
+			break;
 		case IDC_CHAT:
 			{
 				char xxx[251];
@@ -465,11 +486,6 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 				p2p_set_ready(SendMessage(GetDlgItem(hDlg, IDC_READY), BM_GETCHECK, 0, 0)==BST_CHECKED);
 			}
 			break;
-			case CMB_DMODE:
-				{
-					p2p_option_smoothing = (int)SendMessage(GetDlgItem(hDlg, CMB_DMODE), CB_GETCURSEL, 0, 0);
-				}
-				break;
 		case CHK_ENLISTF:
 			p2p_option_forcePort = SendMessage(GetDlgItem(hDlg, CHK_ENLISTF), BM_GETCHECK, 0, 0) == BST_CHECKED ? 1 : 0;
 		case CHK_ENLIST:
@@ -539,8 +555,6 @@ void P2PSelectionDialogProcSetMode(HWND hDlg, bool connector){
 	if (connector){
 		P2PSelectionDialogProcSetModee(hDlg, IDC_PORT, SW_HIDE);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_HOSTPORT_LBL, SW_HIDE);
-		P2PSelectionDialogProcSetModee(hDlg, IDC_P2P_FDLY_LBL, SW_HIDE);
-		P2PSelectionDialogProcSetModee(hDlg, IDC_P2P_FDLY, SW_HIDE);
 
 		P2PSelectionDialogProcSetModee(hDlg, IDC_ULIST, SW_SHOW);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_CONNECT, SW_SHOW);
@@ -560,8 +574,6 @@ void P2PSelectionDialogProcSetMode(HWND hDlg, bool connector){
 	} else {
 		P2PSelectionDialogProcSetModee(hDlg, IDC_PORT, SW_SHOW);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_HOSTPORT_LBL, SW_SHOW);
-		P2PSelectionDialogProcSetModee(hDlg, IDC_P2P_FDLY_LBL, SW_SHOW);
-		P2PSelectionDialogProcSetModee(hDlg, IDC_P2P_FDLY, SW_SHOW);
 
 
 		P2PSelectionDialogProcSetModee(hDlg, IDC_ULIST, SW_HIDE);
@@ -745,23 +757,10 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 						SetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME);
 					}
 	
-				{
-					// Frame delay override (0 = auto-calculated)
-					p2p_frame_delay_override = nSettings::get_int("P2P_FDLY", 0);
-					if (p2p_frame_delay_override == 0) {
-						SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), "");
-					} else {
-						char fdly_str[16];
-						sprintf(fdly_str, "%d", p2p_frame_delay_override);
-						SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_str);
-					}
-					SendMessage(GetDlgItem(hDlg, IDC_P2P_FDLY), EM_LIMITTEXT, 2, 0);
-				}
-
-			nTab tabb;
-			tabb.handle = p2p_ui_modeseltab = GetDlgItem(hDlg, IDC_TAB1);
-			tabb.AddTab("Ho&st", 0);
-			tabb.AddTab("Conn&ect", 1);
+				nTab tabb;
+				tabb.handle = p2p_ui_modeseltab = GetDlgItem(hDlg, IDC_TAB1);
+				tabb.AddTab("Ho&st", 0);
+				tabb.AddTab("Conn&ect", 1);
 			tabb.SelectTab(min(max(nSettings::get_int("IDC_TAB", 0),0),1));
 			P2PSelectionDialogProcSetMode(hDlg, tabb.SelectedTab()!=0);
 
@@ -778,17 +777,10 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 			}
 			break;
 		case WM_CLOSE:
-			{
-				// Save frame delay override
-				char fdly_buf[16];
-				GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
-				p2p_frame_delay_override = atoi(fdly_buf);
-				nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
-			}
 				GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), USERNAME, 31);
-			nSettings::set_str("IDC_USRNAME", USERNAME);
-			nSettings::set_int("IDC_PORT", GetDlgItemInt(hDlg, IDC_PORT, 0, FALSE));
-		GetWindowText(GetDlgItem(hDlg, IDC_GAME), GAME, 127);
+				nSettings::set_str("IDC_USRNAME", USERNAME);
+				nSettings::set_int("IDC_PORT", GetDlgItemInt(hDlg, IDC_PORT, 0, FALSE));
+			GetWindowText(GetDlgItem(hDlg, IDC_GAME), GAME, 127);
 		nSettings::set_str("IDC_GAME", GAME);
 		GetWindowText(GetDlgItem(hDlg, IDC_IP), IP, 127);
 		nSettings::set_str("IDC_IP", IP);
@@ -808,23 +800,9 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 		case WM_COMMAND:
 			switch (LOWORD(wParam)) {
 			case IDC_CONNECT:
-				// Persist any edited frame delay override (even if the dialog stays open)
-				{
-					char fdly_buf[16];
-					GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
-					p2p_frame_delay_override = atoi(fdly_buf);
-					nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
-				}
 				InitializeP2PSubsystem(hDlg, false);
 				break;
 			case IDC_HOST:
-				// Persist any edited frame delay override (even if the dialog stays open)
-				{
-					char fdly_buf[16];
-					GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
-					p2p_frame_delay_override = atoi(fdly_buf);
-					nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
-				}
 				InitializeP2PSubsystem(hDlg, true);
 				break;
 		case IDC_ADD:
