@@ -35,6 +35,8 @@ struct P2PCORESTAT {
 	int ping;
 	int pingc;
 	bool CONNECTED;
+	int last_ping_sent_time;
+	int last_ping_echo_time;
 	bool USERLOADED;
 	bool PEERLOADED;
 } P2PCORE;
@@ -183,6 +185,8 @@ bool p2p_core_initialize(bool host, int port, char * appname, char * gamename, c
 	P2PCORE.throughput = 3;
 	P2PCORE.USERREADY = false;
 	P2PCORE.PEERREADY = false;
+	P2PCORE.last_ping_sent_time = 0;
+	P2PCORE.last_ping_echo_time = 0;
 	P2PCORE.connection->dsc = 0;
 	p2p_chat_cache.clear();
 
@@ -301,6 +305,7 @@ void p2p_ping(){
 	kx.store_sstring((char*)&P2PCORE);
 	P2PCORE.connection->send_instruction(&kx);
 	p2p_PING_TIME = p2p_GetTime();
+	P2PCORE.last_ping_sent_time = p2p_PING_TIME;
 }
 
 void p2p_send_chat(char * xxx){
@@ -603,6 +608,7 @@ void p2p_step(){
 						}
 						if (P2PCORE.ping == 0 && ki.inst.flags == LOGN_RPOS) {
 							P2PCORE.CONNECTED = true;
+							P2PCORE.last_ping_echo_time = p2p_GetTime();
 							p2p_core_debug("Peer reconfirmed connection");
 							
 							p2p_instruction kx;
@@ -611,6 +617,7 @@ void p2p_step(){
 							kx.store_string((char*)&P2PCORE);
 							P2PCORE.connection->send_instruction(&kx);
 							p2p_PING_TIME = p2p_GetTime();
+							P2PCORE.last_ping_sent_time = p2p_PING_TIME;
 							
 							p2p_send_chat("Using version: " P2P_VERSION " - Things may behave in an unexpected manner if different versions are used");
 							
@@ -625,53 +632,55 @@ void p2p_step(){
 
 						}
 						
-						if (P2PCORE.ping == 0 && ki.inst.flags == LOGN_RNEG) {
-							P2PCORE.ping = -1;
-							p2p_core_debug("Peer dropped connection (probbly doensot have the game)");
-						}
-					} else {
-						if (!P2PCORE.HOST && !P2PCORE.CONNECTED){
-							if (P2PCORE.ping == -1 && ki.inst.flags == LOGN_RPOS) {
-								ki.load_sstring(P2PCORE.PEERNAME);
-								ki.load_string(P2PCORE.GAME);
-								p2p_core_debug("Peer replied: %s (%s)", P2PCORE.PEERNAME, P2PCORE.GAME);
-								p2p_peer_info_callback(P2PCORE.PEERNAME, P2PCORE.APP);
-								
-								P2PCORE.CONNECTED = true;
-
-								
-								p2p_hosted_game_callback(P2PCORE.GAME);
-								/*
-								char xxx[800];
-								OutputHex(xxx, &ki, sizeof(ki), 0, true);
-								outp(xxx);
-								//*/
-								p2p_instruction kx;
-								kx.inst.type = LOGN;
-								kx.inst.flags = LOGN_RPOS;
-								P2PCORE.connection->send_instruction(&kx);
-								P2PCORE.ping = 0;
-								
-								p2p_instruction kxx;
-								kxx.inst.type = PING;
-								kxx.inst.flags = PING_PING;
-								kxx.store_string((char*)&P2PCORE);
-								P2PCORE.connection->send_instruction(&kxx);
-								p2p_PING_TIME = p2p_GetTime();
-								
-								p2p_send_chat("Using version: " P2P_VERSION);
-
-								p2p_peer_joined_callback();
-								
-							}
-							if (P2PCORE.ping == -1 && ki.inst.flags == LOGN_RNEG) {
-								p2p_core_debug("Peer dropped connection (Probably different emu version)");
+							if (P2PCORE.ping == 0 && ki.inst.flags == LOGN_RNEG) {
 								P2PCORE.ping = -1;
+								p2p_core_debug("Peer dropped connection (probbly doensot have the game)");
+							}
+						} else {
+							if (!P2PCORE.HOST && !P2PCORE.CONNECTED){
+								if (P2PCORE.ping == -1 && ki.inst.flags == LOGN_RPOS) {
+									ki.load_sstring(P2PCORE.PEERNAME);
+									ki.load_string(P2PCORE.GAME);
+									p2p_core_debug("Peer replied: %s (%s)", P2PCORE.PEERNAME, P2PCORE.GAME);
+									p2p_peer_info_callback(P2PCORE.PEERNAME, P2PCORE.APP);
+									
+									P2PCORE.CONNECTED = true;
+									P2PCORE.last_ping_echo_time = p2p_GetTime();
+
+									
+									p2p_hosted_game_callback(P2PCORE.GAME);
+									/*
+									char xxx[800];
+									OutputHex(xxx, &ki, sizeof(ki), 0, true);
+									outp(xxx);
+									//*/
+									p2p_instruction kx;
+									kx.inst.type = LOGN;
+									kx.inst.flags = LOGN_RPOS;
+									P2PCORE.connection->send_instruction(&kx);
+									P2PCORE.ping = 0;
+									
+									p2p_instruction kxx;
+									kxx.inst.type = PING;
+									kxx.inst.flags = PING_PING;
+									kxx.store_string((char*)&P2PCORE);
+									P2PCORE.connection->send_instruction(&kxx);
+									p2p_PING_TIME = p2p_GetTime();
+									P2PCORE.last_ping_sent_time = p2p_PING_TIME;
+									
+									p2p_send_chat("Using version: " P2P_VERSION);
+
+									p2p_peer_joined_callback();
+									
+								}
+								if (P2PCORE.ping == -1 && ki.inst.flags == LOGN_RNEG) {
+									p2p_core_debug("Peer dropped connection (Probably different emu version)");
+									P2PCORE.ping = -1;
+								}
 							}
 						}
 					}
-				}
-				break;
+					break;
 				
 			case CHAT:
 				{
@@ -685,6 +694,7 @@ void p2p_step(){
 						ki.pos = ki.len;
 						P2PCORE.connection->send_instruction(&ki);
 					} else {
+						P2PCORE.last_ping_echo_time = p2p_GetTime();
 						P2PCORE.ping = p2p_GetTime() - p2p_PING_TIME;
 						p2p_ping_callback(P2PCORE.ping);
 					}
@@ -704,50 +714,91 @@ void p2p_step(){
 				}
 				break;
 			case LOAD:
-				Sleep(P2P_GAMECB_WAIT);
-				p2p_game_callback(P2PCORE.GAME, P2PCORE.HOST? 1:2, 2);
-				break;
+					Sleep(P2P_GAMECB_WAIT);
+					p2p_game_callback(P2PCORE.GAME, P2PCORE.HOST? 1:2, 2);
+					break;
 			case EXIT:
-				p2p_peer_left_callback();
-				P2PCORE.status = P2PCORE.HOST?1:0;
-				P2PCORE.CONNECTED = false;
-				
-				if (P2PCORE.status) {
-					p2p_core_debug("reinitializing server...");
-					delete P2PCORE.connection;
-					P2PCORE.connection = 0;
+					p2p_peer_left_callback();
+					P2PCORE.status = P2PCORE.HOST?1:0;
+					P2PCORE.CONNECTED = false;
+					P2PCORE.last_ping_sent_time = 0;
+					P2PCORE.last_ping_echo_time = 0;
 					
-					if (P2PCORE.connection != 0)
+					if (P2PCORE.status) {
+						p2p_core_debug("reinitializing server...");
 						delete P2PCORE.connection;
-					P2PCORE.connection = new p2p_message;
-					
-					if (!P2PCORE.connection->initialize(P2PCORE.PORT)){
-						p2p_core_debug("Error initializing socket at specified port");
-					} else p2p_core_debug("Done");
-					
-					P2PCORE.status = 1;
-					P2PCORE.ping = -1;
-					P2PCORE.USERREADY = false;
-					P2PCORE.PEERREADY = false;
-					
+						P2PCORE.connection = 0;
+						
+						if (P2PCORE.connection != 0)
+							delete P2PCORE.connection;
+						P2PCORE.connection = new p2p_message;
+						
+						if (!P2PCORE.connection->initialize(P2PCORE.PORT)){
+							p2p_core_debug("Error initializing socket at specified port");
+						} else p2p_core_debug("Done");
+						
+						P2PCORE.status = 1;
+						P2PCORE.ping = -1;
+						P2PCORE.USERREADY = false;
+						P2PCORE.PEERREADY = false;
+						P2PCORE.last_ping_sent_time = 0;
+						P2PCORE.last_ping_echo_time = 0;
+						
+					}
+					break;
 				}
-				break;
+			}
+		}
+		// If the peer disappears without sending EXIT (UDP), the host can get stuck thinking it's still connected.
+		// Use the periodic lobby pings (sent by the UI) to detect this and reset host state so new clients can connect.
+		{
+			const int P2P_LOBBY_PING_TIMEOUT_MS = 10000;
+			const int P2P_LOBBY_PING_ACTIVITY_MS = 5000;
+			const int now = p2p_GetTime();
+
+			if (P2PCORE.HOST &&
+				P2PCORE.CONNECTED &&
+				P2PCORE.status == 1 &&
+				P2PCORE.last_ping_sent_time != 0 &&
+				P2PCORE.last_ping_echo_time != 0 &&
+				(now - P2PCORE.last_ping_sent_time) < P2P_LOBBY_PING_ACTIVITY_MS &&
+				(now - P2PCORE.last_ping_echo_time) > P2P_LOBBY_PING_TIMEOUT_MS) {
+
+				p2p_core_debug("Ping timeout. Peer dropped.");
+				p2p_peer_left_callback();
+
+				P2PCORE.CONNECTED = false;
+				P2PCORE.status = 1;
+				P2PCORE.ping = -1;
+				P2PCORE.USERREADY = false;
+				P2PCORE.PEERREADY = false;
+				P2PCORE.last_ping_sent_time = 0;
+				P2PCORE.last_ping_echo_time = 0;
+
+				p2p_core_debug("reinitializing server...");
+				delete P2PCORE.connection;
+				P2PCORE.connection = new p2p_message;
+				if (!P2PCORE.connection->initialize(P2PCORE.PORT)){
+					p2p_core_debug("Error initializing socket at specified port");
+				} else {
+					p2p_core_debug("Done");
+				}
+				P2PCORE.ping = -1;
+			}
+		}
+		if (P2PCORE.connection && P2PCORE.connection->has_ssrv()){
+			char xxx[2000];
+			sockaddr_in saddr;
+			p2p_ssrv_packet_recv_callback(xxx, P2PCORE.connection->receive_ssrv(xxx, &saddr), &saddr);
+		}
+		if (p2p_chat_cache.length > 0){
+			do {
+				p2p_chatstruct * cma = &p2p_chat_cache.items[0];
+				p2p_chat_callback(cma->local? P2PCORE.USERNAME:P2PCORE.PEERNAME, cma->msg);
+				p2p_chat_cache.removei(0);
+			} while (p2p_chat_cache.length > 0);
 		}
 	}
-	}
-	if (P2PCORE.connection && P2PCORE.connection->has_ssrv()){
-		char xxx[2000];
-		sockaddr_in saddr;
-		p2p_ssrv_packet_recv_callback(xxx, P2PCORE.connection->receive_ssrv(xxx, &saddr), &saddr);
-	}
-	if (p2p_chat_cache.length > 0){
-		do {
-			p2p_chatstruct * cma = &p2p_chat_cache.items[0];
-			p2p_chat_callback(cma->local? P2PCORE.USERNAME:P2PCORE.PEERNAME, cma->msg);
-			p2p_chat_cache.removei(0);
-		} while (p2p_chat_cache.length > 0);
-	}
-}
 
 inline bool ProcessGameStuff(){
 	n02_TRACE();

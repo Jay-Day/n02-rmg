@@ -152,8 +152,7 @@ int kaillera_sdlg_MODE;
 void kaillera_sdlgGameMode(bool toggle = false){
 	kaillera_sdlg_MODE = 0;
 	if (!toggle){
-		if (hosting)
-			SetWindowText(GetDlgItem(kaillera_sdlg, IDC_CREATE), "Swap");
+		SetWindowText(GetDlgItem(kaillera_sdlg, IDC_CREATE), "Swap");
 		kaillera_sdlg_toggle = false;
 	} else {
 		kaillera_sdlg_toggle = false;
@@ -1028,22 +1027,22 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 		EndDialog(hDlg, 0);
 
 		break;
-	case WM_COMMAND:
-		switch (LOWORD(wParam)) {
+			case WM_COMMAND:
+			switch (LOWORD(wParam)) {
 			case TXT_MSG:
 				if (HIWORD(wParam) == EN_KILLFOCUS)
 					SaveJoinMessageSetting();
 				break;
-			case IDC_CREATE:
-				if (kaillera_sdlg_MODE == 1){
-					kaillera_sdlg_show_games_list_menu(hDlg);
-				} else if (hosting) {
-					if (!kaillera_sdlg_toggle)
-						kaillera_sdlgNormalMode(true);
-					else
-						kaillera_sdlgGameMode(true);
-				}
-				break;
+				case IDC_CREATE:
+					if (kaillera_sdlg_MODE == 1){
+						kaillera_sdlg_show_games_list_menu(hDlg);
+					} else {
+						if (!kaillera_sdlg_toggle)
+							kaillera_sdlgNormalMode(true);
+						else
+							kaillera_sdlgGameMode(true);
+					}
+					break;
 				case IDC_CHAT:
 					{
 						char buffrr[2024];

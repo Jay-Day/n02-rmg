@@ -20,6 +20,7 @@ k_socket::k_socket(){
 	sock = 0;
 	list.add(this);
 	has_data_waiting = false;
+	memset(&addr, 0, sizeof(addr));
 	if(ndfs == 0) {
 		FD_ZERO(&sockets);
 	}
@@ -164,7 +165,8 @@ int k_socket::get_port(){
 }
 
 char* k_socket::to_string(char *buf){
-	sprintf(buf, "k_socket {\n\tsock: %u;\n\tport: %u;\n\thas_data: %i;\n};", sock, port, has_data_waiting);
+	sprintf(buf, "k_socket {\n\tsock: %llu;\n\tport: %u;\n\thas_data: %i;\n};",
+		(unsigned long long)sock, (unsigned int)port, (int)has_data_waiting);
 	return buf;
 }
 

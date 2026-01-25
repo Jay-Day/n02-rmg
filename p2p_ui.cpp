@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include "string.h"
 #include "common/nSTL.h"
 
@@ -14,6 +15,108 @@
 
 
 extern HINSTANCE hx;
+
+static const char* kNoSpaceEditOldProcProp = "n02_NoSpaceEditOldProc";
+
+static void StripSpacesInPlace(char* s) {
+	if (s == NULL)
+		return;
+	size_t writeIndex = 0;
+	for (size_t readIndex = 0; s[readIndex] != 0; readIndex++) {
+		if (s[readIndex] != ' ')
+			s[writeIndex++] = s[readIndex];
+	}
+	s[writeIndex] = 0;
+}
+
+static void RemoveSpacesInEditControl(HWND hEdit) {
+	int textLength = GetWindowTextLength(hEdit);
+	if (textLength <= 0)
+		return;
+
+	int bufferChars = textLength + 1;
+	char* buffer = (char*)malloc((size_t)bufferChars);
+	if (buffer == NULL)
+		return;
+
+	GetWindowText(hEdit, buffer, bufferChars);
+
+	DWORD selStart = 0;
+	DWORD selEnd = 0;
+	SendMessage(hEdit, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
+
+	DWORD removedBeforeStart = 0;
+	DWORD removedBeforeEnd = 0;
+	for (DWORD i = 0; i < (DWORD)textLength; i++) {
+		if (i < selStart && buffer[i] == ' ')
+			removedBeforeStart++;
+		if (i < selEnd && buffer[i] == ' ')
+			removedBeforeEnd++;
+	}
+
+	int writeIndex = 0;
+	for (int readIndex = 0; readIndex < textLength; readIndex++) {
+		if (buffer[readIndex] != ' ')
+			buffer[writeIndex++] = buffer[readIndex];
+	}
+	buffer[writeIndex] = 0;
+
+	if (writeIndex != textLength) {
+		SetWindowText(hEdit, buffer);
+		DWORD newSelStart = (selStart > removedBeforeStart) ? (selStart - removedBeforeStart) : 0;
+		DWORD newSelEnd = (selEnd > removedBeforeEnd) ? (selEnd - removedBeforeEnd) : 0;
+		if (newSelStart > (DWORD)writeIndex)
+			newSelStart = (DWORD)writeIndex;
+		if (newSelEnd > (DWORD)writeIndex)
+			newSelEnd = (DWORD)writeIndex;
+		SendMessage(hEdit, EM_SETSEL, newSelStart, newSelEnd);
+	}
+
+	free(buffer);
+}
+
+static LRESULT CALLBACK NoSpaceEditProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	WNDPROC oldProc = (WNDPROC)GetPropA(hWnd, kNoSpaceEditOldProcProp);
+	if (oldProc == NULL)
+		return DefWindowProc(hWnd, uMsg, wParam, lParam);
+
+	switch (uMsg) {
+		case WM_CHAR:
+			if (wParam == ' ')
+				return 0;
+			break;
+		case WM_PASTE:
+		{
+			LRESULT result = CallWindowProc(oldProc, hWnd, uMsg, wParam, lParam);
+			RemoveSpacesInEditControl(hWnd);
+			return result;
+		}
+		case WM_SETTEXT:
+		{
+			LRESULT result = CallWindowProc(oldProc, hWnd, uMsg, wParam, lParam);
+			RemoveSpacesInEditControl(hWnd);
+			return result;
+		}
+		case WM_NCDESTROY:
+		{
+			RemovePropA(hWnd, kNoSpaceEditOldProcProp);
+			SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)oldProc);
+			return CallWindowProc(oldProc, hWnd, uMsg, wParam, lParam);
+		}
+	};
+
+	return CallWindowProc(oldProc, hWnd, uMsg, wParam, lParam);
+}
+
+static void InstallNoSpaceFilterForEdit(HWND hEdit) {
+	if (hEdit == NULL)
+		return;
+	if (GetPropA(hEdit, kNoSpaceEditOldProcProp) != NULL)
+		return;
+
+	WNDPROC oldProc = (WNDPROC)SetWindowLongPtr(hEdit, GWLP_WNDPROC, (LONG_PTR)NoSpaceEditProc);
+	SetPropA(hEdit, kNoSpaceEditOldProcProp, (HANDLE)oldProc);
+}
 
 static void UpdateModeRadioButtons(HWND hDlg){
 	int mode = get_active_mode_index();
@@ -70,6 +173,102 @@ void flash_window(HWND handle) {
 	fi.uCount = 0;
 	fi.dwTimeout = 0;
 	FlashWindowEx(&fi);
+}
+
+static bool g_p2p_ssrv_copy_myip_pending = false;
+
+static void CopyTextToClipboard(HWND owner, const char* text) {
+	if (text == NULL || *text == 0)
+		return;
+
+	if (!OpenClipboard(owner))
+		return;
+
+	EmptyClipboard();
+
+	const size_t len = strlen(text) + 1;
+	HGLOBAL hClipboardData = GlobalAlloc(GMEM_MOVEABLE, len);
+	if (hClipboardData) {
+		void* data = GlobalLock(hClipboardData);
+		if (data) {
+			memcpy(data, text, len);
+			GlobalUnlock(hClipboardData);
+			if (SetClipboardData(CF_TEXT, hClipboardData) == NULL) {
+				GlobalFree(hClipboardData);
+			}
+		} else {
+			GlobalFree(hClipboardData);
+		}
+	}
+
+	CloseClipboard();
+}
+
+static bool TryExtractIPv4AndPort(const char* s, char* out_ip, size_t out_ip_len, int* out_port) {
+	if (s == NULL || out_ip == NULL || out_ip_len == 0)
+		return false;
+
+	out_ip[0] = 0;
+	if (out_port)
+		*out_port = 0;
+
+	for (const char* p = s; *p; p++) {
+		if (*p < '0' || *p > '9')
+			continue;
+
+		unsigned int octets[4];
+		const char* cur = p;
+		bool ok = true;
+		for (int i = 0; i < 4; i++) {
+			unsigned int val = 0;
+			int digits = 0;
+			while (*cur >= '0' && *cur <= '9' && digits < 3) {
+				val = val * 10 + (unsigned int)(*cur - '0');
+				cur++;
+				digits++;
+			}
+			if (digits == 0 || val > 255) {
+				ok = false;
+				break;
+			}
+			octets[i] = val;
+			if (i < 3) {
+				if (*cur != '.') {
+					ok = false;
+					break;
+				}
+				cur++;
+			}
+		}
+		if (!ok)
+			continue;
+
+		_snprintf_s(out_ip, out_ip_len, _TRUNCATE, "%u.%u.%u.%u", octets[0], octets[1], octets[2], octets[3]);
+
+		// Optional ":port" (or " port")
+		while (*cur == ' ' || *cur == '\t')
+			cur++;
+		if (*cur == ':') {
+			cur++;
+		} else if (*cur != 0 && (*cur < '0' || *cur > '9')) {
+			return true;
+		}
+
+		if (out_port) {
+			unsigned int port = 0;
+			int digits = 0;
+			while (*cur >= '0' && *cur <= '9' && digits < 5) {
+				port = port * 10 + (unsigned int)(*cur - '0');
+				cur++;
+				digits++;
+			}
+			if (digits > 0 && port > 0 && port <= 65535)
+				*out_port = (int)port;
+		}
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -238,10 +437,23 @@ void p2p_ssrv_send(char* cmd) {
 }
 
 void p2p_ssrv_whatismyip(){
+	g_p2p_ssrv_copy_myip_pending = true;
 	p2p_ssrv_send("WHATISMYIP");
 }
 
 void p2p_ssrv_packet_recv_callback(char *cmd, int len, void *sadr){
+	char cmd_buf[2048];
+	if (cmd == NULL || len <= 0)
+		return;
+	{
+		int copy_len = len;
+		if (copy_len > (int)sizeof(cmd_buf) - 1)
+			copy_len = (int)sizeof(cmd_buf) - 1;
+		memcpy(cmd_buf, cmd, (size_t)copy_len);
+		cmd_buf[copy_len] = 0;
+		cmd = cmd_buf;
+	}
+
 	if (strcmp(cmd, "PINGRQ")==0){
 		p2p_send_ssrv_packet("xxxxxxxxxx",11, sadr);
 		return;
@@ -249,6 +461,22 @@ void p2p_ssrv_packet_recv_callback(char *cmd, int len, void *sadr){
 		return;
 	}
 
+	if (g_p2p_ssrv_copy_myip_pending) {
+		char ip[32];
+		int port = 0;
+		if (TryExtractIPv4AndPort(cmd, ip, sizeof(ip), &port)) {
+			if (port <= 0)
+				port = p2p_core_get_port();
+			if (port > 0) {
+				char ip_port[64];
+				_snprintf_s(ip_port, sizeof(ip_port), _TRUNCATE, "%s:%d", ip, port);
+				CopyTextToClipboard(p2p_ui_connection_dlg, ip_port);
+				outpf("Copied %s to clipboard", ip_port);
+			}
+		}
+		// Best-effort: don't keep a dangling "copy pending" flag if the reply is unexpected/unsupported.
+		g_p2p_ssrv_copy_myip_pending = false;
+	}
 
 	p2p_core_debug("SSRV: %s", cmd);
 }
@@ -366,43 +594,32 @@ UINT_PTR p2p_cdlg_timer;
 int p2p_cdlg_timer_step;
 LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
-	case WM_INITDIALOG:
-		{
-			// "Host smoothing" UI removed; always treat as None.
-			p2p_option_smoothing = 0;
+		case WM_INITDIALOG:
+			{
+				// "Host smoothing" UI removed; always treat as None.
+				p2p_option_smoothing = 0;
 
-			// Load frame delay override (0 = auto-calculated)
-			p2p_frame_delay_override = nSettings::get_int("P2P_FDLY", 0);
-			if (p2p_frame_delay_override == 0) {
+				// Frame delay override should be per-session (not persisted).
+				p2p_frame_delay_override = 0;
 				SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), "");
-			} else {
-				char fdly_str[16];
-				sprintf(fdly_str, "%d", p2p_frame_delay_override);
-				SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_str);
-			}
-			SendMessage(GetDlgItem(hDlg, IDC_P2P_FDLY), EM_LIMITTEXT, 2, 0);
+				SendMessage(GetDlgItem(hDlg, IDC_P2P_FDLY), EM_LIMITTEXT, 2, 0);
 
-			p2p_ui_con_richedit = GetDlgItem(hDlg, IDC_RICHEDIT2);
-			p2p_ui_con_chatinp = GetDlgItem(hDlg, IDC_CHATI);
-			IniaialzeConnectionDialog(hDlg);
+				p2p_ui_con_richedit = GetDlgItem(hDlg, IDC_RICHEDIT2);
+				p2p_ui_con_chatinp = GetDlgItem(hDlg, IDC_CHATI);
+				IniaialzeConnectionDialog(hDlg);
 			SendMessage(p2p_ui_con_richedit, EM_AUTOURLDETECT, TRUE, FALSE);
 			p2p_cdlg_timer = SetTimer(hDlg, 0, 1000, 0);
 		}
 		
 		break;
-	case WM_CLOSE:
-		if (p2p_disconnect()){
-			// Save frame delay override
-			{
-				char fdly_buf[16];
-				GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
-				p2p_frame_delay_override = atoi(fdly_buf);
-				nSettings::set_int("P2P_FDLY", p2p_frame_delay_override);
-			}
+		case WM_CLOSE:
+			if (p2p_disconnect()){
+				// Ensure any override doesn't persist across runs
+				p2p_frame_delay_override = 0;
 
-			if (SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
-				p2p_ssrv_unenlistgame();
-			}
+				if (SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
+					p2p_ssrv_unenlistgame();
+				}
 
 			KillTimer(hDlg, p2p_cdlg_timer);
 			//kprintf(__FILE__ ":%i", __LINE__);
@@ -519,6 +736,7 @@ void InitializeP2PSubsystem(HWND hDlg, bool host){
 	GetWindowText(GetDlgItem(p2p_ui_ss_dlg, IDC_IP), IP, 127);
 	GetWindowText(GetDlgItem(p2p_ui_ss_dlg, IDC_USRNAME), USERNAME, 31);
 
+	StripSpacesInPlace(IP);
 
 	//kprintf(__FILE__ ":%i", __LINE__);//localhost:27888
 
@@ -615,6 +833,7 @@ P2PHBS P2PHBS_temp;
 
 LRESULT CALLBACK P2PStoredUsersModifyDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	if (uMsg==WM_INITDIALOG){
+		InstallNoSpaceFilterForEdit(GetDlgItem(hDlg, IDC_IP));
 		if (lParam){
 			SetWindowText(GetDlgItem(hDlg, IDC_NAME), P2PHBS_temp.username);
 			SetWindowText(GetDlgItem(hDlg, IDC_IP), P2PHBS_temp.hostname);
@@ -724,6 +943,7 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 		{
 
 			p2p_ui_ss_dlg = hDlg;
+			InstallNoSpaceFilterForEdit(GetDlgItem(hDlg, IDC_IP));
 
 			SetWindowText(hDlg, "n02.p2p " P2P_VERSION);
 			
