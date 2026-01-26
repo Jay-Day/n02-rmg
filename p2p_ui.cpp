@@ -489,7 +489,7 @@ void p2p_ssrv_enlistgame(){
 
 void p2p_ssrv_enlistgamef() {
 	char buf[500];
-	wsprintf(buf, "ENLIST %s|%s|%s|%i", GAME, APP, USERNAME, PORT);
+	wsprintf(buf, "ENLISP %s|%s|%s|%i", GAME, APP, USERNAME, PORT);
 	p2p_ssrv_send(buf);
 }
 
