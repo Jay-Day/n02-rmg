@@ -87,7 +87,7 @@ UINT_PTR kaillera_sdlg_sipd_timer;
 int kaillera_sdlg_frameno = 0;
 int kaillera_sdlg_pps = 0;
 int kaillera_sdlg_delay = -1;
-int kaillera_frame_delay_override = 0;
+int kaillera_spoof_ping = 0;  // 0 = auto (no spoofing), >0 = spoof ping in ms
 bool MINGUIUPDATE;
 bool hosting = false;
 bool kaillera_sdlg_toggle = false;
@@ -1179,6 +1179,16 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 	strncpy(kaillera_sdlg_NAME, (name != NULL) ? name : "", sizeof(kaillera_sdlg_NAME) - 1);
 	kaillera_sdlg_NAME[sizeof(kaillera_sdlg_NAME) - 1] = 0;
 
+	// Get ping spoof setting from dropdown (0=auto, 1-9=frame delay)
+	int fdly_index = (int)SendMessage(GetDlgItem(kaillera_ssdlg, IDC_QUITMSG), CB_GETCURSEL, 0, 0);
+	if (fdly_index > 0 && fdly_index <= 9) {
+		// Calculate spoof ping: x * 16 - 8 = ms
+		kaillera_spoof_ping = fdly_index * 16 - 8;
+		kaillera_set_spoof_ping(kaillera_spoof_ping);
+	} else {
+		kaillera_set_spoof_ping(0);  // Auto - no spoofing
+	}
+
 	char un[32];
 	GetWindowText(GetDlgItem(kaillera_ssdlg, IDC_USRNAME), un, 32);
 	un[31]=0;
@@ -1512,11 +1522,6 @@ LRESULT CALLBACK CustomIPDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM 
 			break;
 		case WM_COMMAND:
 			if (LOWORD(wParam)==BTN_CONNECT){
-				// Read frame delay override from main dialog before connecting
-				char fdly_buf[16];
-				GetWindowText(GetDlgItem(kaillera_ssdlg, IDC_QUITMSG), fdly_buf, 16);
-				kaillera_frame_delay_override = atoi(fdly_buf);
-
 				char * host = KLSNST_temp.hostname;
 				GetWindowText(GetDlgItem(hDlg, IDC_IP), host, 128);
 				int port = 27888;
@@ -1597,16 +1602,23 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 				}
 			
 				{
-					// Frame delay override (0 = use server value)
-					kaillera_frame_delay_override = nSettings::get_int("FDLY", 0);
-					if (kaillera_frame_delay_override == 0) {
-						SetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), "");
-					} else {
-						char fdly_str[16];
-						sprintf(fdly_str, "%d", kaillera_frame_delay_override);
-						SetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), fdly_str);
+					// Ping spoof dropdown (0 = auto, 1-9 = target frame delay)
+					HWND hFdlyCombo = GetDlgItem(hDlg, IDC_QUITMSG);
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"Auto");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"1 frame (8ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"2 frames (24ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"3 frames (40ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"4 frames (56ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"5 frames (72ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"6 frames (88ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"7 frames (104ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"8 frames (120ms)");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"9 frames (136ms)");
+					int saved_fdly = nSettings::get_int("FDLY", 0);
+					if (saved_fdly < 0 || saved_fdly > 9) {
+						saved_fdly = 0;
 					}
-					SendMessage(GetDlgItem(hDlg, IDC_QUITMSG), EM_LIMITTEXT, 2, 0);
+					SendMessage(hFdlyCombo, CB_SETCURSEL, saved_fdly, 0);
 				}
 
 			
@@ -1627,14 +1639,14 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 	case WM_CLOSE:
 		{
 			char tbuf[128];
-			// Save frame delay override
-			GetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), tbuf, 128);
-			kaillera_frame_delay_override = atoi(tbuf);
-			nSettings::set_int("FDLY", kaillera_frame_delay_override);
-			
+			// Save ping spoof setting (combobox index)
+			int fdly_index = (int)SendMessage(GetDlgItem(hDlg, IDC_QUITMSG), CB_GETCURSEL, 0, 0);
+			if (fdly_index == CB_ERR) fdly_index = 0;
+			nSettings::set_int("FDLY", fdly_index);
+
 			GetWindowText(GetDlgItem(hDlg, IDC_USRNAME), tbuf, 128);
 			nSettings::set_str("USRN", tbuf);
-			
+
 		}
 		
 		KLSListSave();
@@ -1661,12 +1673,6 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 				KLSListTRACE();
 				break;
 			case BTN_CONNECT:
-				{
-					// Read frame delay override before connecting
-					char fdly_buf[16];
-					GetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), fdly_buf, 16);
-					kaillera_frame_delay_override = atoi(fdly_buf);
-				}
 				KLSListConnect();
 				break;
 			case BTN_ABOUT:
@@ -1695,10 +1701,6 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 		case WM_NOTIFY:
 
 			if(((LPNMHDR)lParam)->code==NM_DBLCLK && ((LPNMHDR)lParam)->hwndFrom==KLSListLv.handle){
-				// Read frame delay override before connecting
-				char fdly_buf[16];
-				GetWindowText(GetDlgItem(hDlg, IDC_QUITMSG), fdly_buf, 16);
-				kaillera_frame_delay_override = atoi(fdly_buf);
 				KLSListConnect();
 			}
 			if(((LPNMHDR)lParam)->code==NM_RCLICK && ((LPNMHDR)lParam)->hwndFrom==KLSListLv.handle){

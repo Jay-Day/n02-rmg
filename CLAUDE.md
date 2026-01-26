@@ -13,15 +13,37 @@ N02 is a Kaillera client DLL implementation that provides netplay functionality 
 
 ### Windows (Visual Studio)
 ```bash
-# Build using the included batch script (requires VS2019 Build Tools)
+# Build using the included batch script (auto-detects VS2019/2022/2026)
 ./build.bat
 ```
 
-Output: `x64\Release\kailleraclient.dll` (or `Release\kailleraclient.dll` for 32-bit)
+The build script automatically finds MSBuild from:
+- VS2026 Community/Professional/Enterprise (v145 toolset)
+- VS2022 Community/Professional/Enterprise (v143 toolset)
+- VS2019 Build Tools/Community (v142 toolset)
+
+Output: `x64\Release\kailleraclient.dll`
+
+To use with an emulator (e.g., RMG), copy the output DLL to the emulator's folder as `kailleraclient.dll`.
+
+### Manual Build
+```bash
+# VS2026 (v145 toolset)
+msbuild n02p.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v145 /p:WindowsTargetPlatformVersion=10.0
+
+# VS2022 (v143 toolset)
+msbuild n02p.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0
+
+# VS2019 (v142 toolset)
+msbuild n02p.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v142 /p:WindowsTargetPlatformVersion=10.0
+```
+
+### CI
+GitHub Actions workflow (`.github/workflows/build.yml`) builds on push to tags `v*` and PRs. Artifacts are uploaded automatically.
 
 ### Dependencies
-- Windows SDK (WinSock2: ws2_32.lib, comctl32.lib)
-- Visual Studio 2017+ toolset (v141_xp or later)
+- Windows SDK 10.0 (WinSock2: ws2_32.lib, comctl32.lib)
+- Visual Studio 2019+ with C++ build tools
 
 ## Architecture
 

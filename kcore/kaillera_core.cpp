@@ -13,7 +13,8 @@
 #define KAILLERA_TIMEOUT_NETSYNC_RETR_INTERVAL 5000
 
 extern int PACKETLOSSCOUNT;
-extern int kaillera_frame_delay_override;
+extern int kaillera_spoof_ping;  // 0 = auto (no spoofing), >0 = spoof ping in ms
+static bool kaillera_spoofing = false;  // Set during connect based on kaillera_spoof_ping
 
 typedef struct {
 	k_message * connection;
@@ -43,14 +44,21 @@ typedef struct {
 	bool has_dropped;  // Track if player dropped (for restart handling)
 	unsigned short user_id;
 		int tmoutrsttime;
-		bool pending_fdly_announce;
-		int fdly_announce_time;
+		bool pending_spoof_announce;
+		int spoof_announce_time;
 	} KAILLERAC_;
 
 KAILLERAC_ KAILLERAC;
 
-
-
+// Helper function to send a pong response
+static void SendPong() {
+	k_instruction pong;
+	pong.type = USERPONG;
+	int x = 0;
+	while(x < 4)
+		pong.store_int(x++);
+	KAILLERAC.connection->send_instruction(&pong);
+}
 
 void kaillera_print_core_status(){
 	kaillera_core_debug("USS/PS: %i/%i", KAILLERAC.USERSTAT, KAILLERAC.PLAYERSTAT);
@@ -119,6 +127,17 @@ bool kaillera_disconnect(char * quitmsg){
 	return true;
 }
 
+
+void kaillera_set_spoof_ping(int spoof_ping_ms) {
+	if (spoof_ping_ms > 0 && spoof_ping_ms < 1000) {
+		kaillera_spoof_ping = spoof_ping_ms;
+		kaillera_spoofing = true;
+		kaillera_core_debug("Ping spoofing set to %dms", spoof_ping_ms);
+	} else {
+		kaillera_spoof_ping = 0;
+		kaillera_spoofing = false;
+	}
+}
 
 bool kaillera_core_initialize(int port, char * appname, char * username, char connection_setting){
 	p2p_InitializeTime();
@@ -209,6 +228,20 @@ bool kaillera_core_connect(char * ip, int port){
 					
 					KAILLERAC.connection->send_instruction(&ki);
 
+					// Ping spoofing: send 4 delayed pongs to make server think we have higher latency
+					// This allows us to control what frame delay the server calculates for us
+					if (kaillera_spoofing && kaillera_spoof_ping > 0) {
+						kaillera_core_debug("Ping spoofing enabled: %dms delay", kaillera_spoof_ping);
+						Sleep(kaillera_spoof_ping);
+						SendPong();
+						Sleep(kaillera_spoof_ping);
+						SendPong();
+						Sleep(kaillera_spoof_ping);
+						SendPong();
+						Sleep(kaillera_spoof_ping);
+						SendPong();
+					}
+
 					return true;
 					}
 				} else {
@@ -297,16 +330,9 @@ void kaillera_ProcessGeneralInstruction(k_instruction * ki) {
 			//KAILLERAC.USERSTAT = 3;
 			KAILLERAC.PLAYERSTAT = 1;
 			KAILLERAC.throughput = ki->load_short();
-			int server_delay = (KAILLERAC.throughput + 1) * KAILLERAC.conset - 1;
-
-			// Apply delay override if set, otherwise use server delay
-			if (kaillera_frame_delay_override > 0) {
-				KAILLERAC.dframeno = kaillera_frame_delay_override;
-				kaillera_core_debug("Server delay: %i frames, using override: %i frames", server_delay, KAILLERAC.dframeno);
-			} else {
-				KAILLERAC.dframeno = server_delay;
-				kaillera_core_debug("Server says: delay is %i frames", KAILLERAC.dframeno);
-			}
+			KAILLERAC.dframeno = (KAILLERAC.throughput + 1) * KAILLERAC.conset - 1;
+			kaillera_core_debug("Server says: delay is %i frames (throughput=%i, conset=%i)",
+				KAILLERAC.dframeno, KAILLERAC.throughput, KAILLERAC.conset);
 
 			KAILLERAC.playerno = ki->load_char();
 			int players = ki->load_char();
@@ -330,6 +356,12 @@ void kaillera_ProcessGeneralInstruction(k_instruction * ki) {
 				unsigned short id = ki->load_short();
 				int conn = ki->load_char();
 				kaillera_player_add_callback(name, ping, id, conn);
+			}
+
+			// Schedule ping spoof announcement when joining game (delayed to avoid flood control)
+			if (kaillera_spoofing && kaillera_spoof_ping > 0) {
+				KAILLERAC.pending_spoof_announce = true;
+				KAILLERAC.spoof_announce_time = p2p_GetTime() + 2000;
 			}
 			break;
 		}
@@ -423,22 +455,19 @@ void kaillera_ProcessGeneralInstruction(k_instruction * ki) {
 			}
 			KAILLERAC.tmoutrsttime = p2p_GetTime();
 
-			// Schedule frame delay override announcement (delayed to avoid flood control)
-			if (kaillera_frame_delay_override > 0) {
-				KAILLERAC.pending_fdly_announce = true;
-				KAILLERAC.fdly_announce_time = p2p_GetTime() + 2000;
+			// Schedule ping spoof announcement (delayed to avoid flood control)
+			if (kaillera_spoofing && kaillera_spoof_ping > 0) {
+				KAILLERAC.pending_spoof_announce = true;
+				KAILLERAC.spoof_announce_time = p2p_GetTime() + 2000;
 			}
 			break;
 		}
 	case SERVPING:
 		{
-			//kaillera_core_debug("PING");
-			k_instruction pong;
-			pong.type = USERPONG;
-			int x = 0;
-			while(x<4)
-				pong.store_int(x++);
-			KAILLERAC.connection->send_instruction(&pong);
+			// Only respond to pings if not spoofing (spoofed pongs were sent during login)
+			if (!kaillera_spoofing) {
+				SendPong();
+			}
 			break;
 		}
 	case LOGNSTAT:
@@ -467,12 +496,19 @@ void kaillera_step(){
 			kaillera_ProcessGeneralInstruction(&ki);
 		}
 	}
-	// Send pending frame delay announcement after delay
-	if (KAILLERAC.pending_fdly_announce && p2p_GetTime() >= KAILLERAC.fdly_announce_time) {
-		KAILLERAC.pending_fdly_announce = false;
-		char fdly_msg[64];
-		sprintf(fdly_msg, "Using frame delay override: %d", kaillera_frame_delay_override);
-		kaillera_chat_send(fdly_msg);
+	// Send pending ping spoof announcement after delay
+	if (KAILLERAC.pending_spoof_announce && p2p_GetTime() >= KAILLERAC.spoof_announce_time) {
+		KAILLERAC.pending_spoof_announce = false;
+		// Calculate target frame delay from spoof ping: (spoof_ping + 8) / 16
+		int target_delay = (kaillera_spoof_ping + 8) / 16;
+		char spoof_msg[64];
+		sprintf(spoof_msg, "Ping spoofing: %dms (target: %df)", kaillera_spoof_ping, target_delay);
+		// Use game chat if in a game room, otherwise lobby chat
+		if (KAILLERAC.USERSTAT == 3) {
+			kaillera_game_chat_send(spoof_msg);
+		} else {
+			kaillera_chat_send(spoof_msg);
+		}
 	}
 	if (KAILLERAC.USERSTAT > 1 && p2p_GetTime() - KAILLERAC.tmoutrsttime > KAILLERA_TIMEOUT_RESET) {
 		KAILLERAC.tmoutrsttime = p2p_GetTime();

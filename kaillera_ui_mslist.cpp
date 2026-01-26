@@ -17,7 +17,6 @@
 
 void ConnectToServer(char * ip, int port, HWND pDlg, char*name);
 extern HWND kaillera_ssdlg;
-extern int kaillera_frame_delay_override;
 
 
 HWND kaillera_mslref;
@@ -595,10 +594,6 @@ void kaillera_mldlg_connect_selected(HWND hDlg){
 			port = port==0?27888:port;
 		}
 		host = tx;
-		// Read frame delay override from main dialog before connecting
-		char fdly_buf[16];
-		GetWindowText(GetDlgItem(kaillera_ssdlg, IDC_QUITMSG), fdly_buf, 16);
-		kaillera_frame_delay_override = atoi(fdly_buf);
 		ConnectToServer(host, port, hDlg, name);
 	}
 }
@@ -630,10 +625,6 @@ void kaillera_wgdlg_connect_selected(HWND hDlg){
 			port = port==0?27888:port;
 		}
 		host = tx;
-		// Read frame delay override from main dialog before connecting
-		char fdly_buf[16];
-		GetWindowText(GetDlgItem(kaillera_ssdlg, IDC_QUITMSG), fdly_buf, 16);
-		kaillera_frame_delay_override = atoi(fdly_buf);
 		ConnectToServer(host, port, hDlg, host);
 	}
 }
