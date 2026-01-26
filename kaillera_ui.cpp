@@ -1604,7 +1604,7 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 				{
 					// Ping spoof dropdown (0 = auto, 1-9 = target frame delay)
 					HWND hFdlyCombo = GetDlgItem(hDlg, IDC_QUITMSG);
-					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"auto");
+					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"Auto");
 					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"1f (8ms)");
 					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"2f (24ms)");
 					SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"3f (40ms)");

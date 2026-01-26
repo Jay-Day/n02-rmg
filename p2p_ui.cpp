@@ -604,10 +604,20 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 				// "Host smoothing" UI removed; always treat as None.
 				p2p_option_smoothing = 0;
 
-				// Frame delay override should be per-session (not persisted).
+				// Frame delay dropdown (host only, per-session)
 				p2p_frame_delay_override = 0;
-				SetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), "");
-				SendMessage(GetDlgItem(hDlg, IDC_P2P_FDLY), EM_LIMITTEXT, 2, 0);
+				HWND hFdlyCombo = GetDlgItem(hDlg, IDC_P2P_FDLY);
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"Auto");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"1f (8ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"2f (24ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"3f (40ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"4f (56ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"5f (72ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"6f (88ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"7f (104ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"8f (120ms)");
+				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"9f (136ms)");
+				SendMessage(hFdlyCombo, CB_SETCURSEL, 0, 0);
 
 				p2p_ui_con_richedit = GetDlgItem(hDlg, IDC_RICHEDIT2);
 				p2p_ui_con_chatinp = GetDlgItem(hDlg, IDC_CHATI);
@@ -673,10 +683,9 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 		////kprintf(__FILE__ ":%i", __LINE__);//localhost:27888
 		switch (LOWORD(wParam)) {
 		case IDC_P2P_FDLY:
-			if (HIWORD(wParam) == EN_CHANGE) {
-				char fdly_buf[16];
-				GetWindowText(GetDlgItem(hDlg, IDC_P2P_FDLY), fdly_buf, 16);
-				p2p_frame_delay_override = atoi(fdly_buf);
+			if (HIWORD(wParam) == CBN_SELCHANGE) {
+				p2p_frame_delay_override = (int)SendMessage(GetDlgItem(hDlg, IDC_P2P_FDLY), CB_GETCURSEL, 0, 0);
+				if (p2p_frame_delay_override == CB_ERR) p2p_frame_delay_override = 0;
 			}
 			break;
 		case IDC_CHAT:

@@ -125,8 +125,8 @@ BEGIN
     PUSHBUTTON      "whatismyip",IDC_SSERV_WHATSMYIP,252,249,45,11
     CONTROL         "Enli&st in waiting games list",CHK_ENLIST,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,254,238,99,10
     GROUPBOX        "Host:",IDC_HOSTT,246,218,111,58
-    LTEXT           "Delay override:",IDC_P2P_FDLY_LBL,254,226,52,8
-    EDITTEXT        IDC_P2P_FDLY,310,224,24,12,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Frame Delay:",IDC_P2P_FDLY_LBL,254,226,45,8
+    COMBOBOX        IDC_P2P_FDLY,302,224,50,150,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Game: -------------------------------------------------------------------------------",IDC_GAME,7,7,350,9,0,WS_EX_STATICEDGE
     PUSHBUTTON      "Eject peer",IDC_EJECT,252,262,45,11,NOT WS_VISIBLE
     PUSHBUTTON      "Dont allow list",IDC_DONTALLOW,303,262,50,11,NOT WS_VISIBLE
