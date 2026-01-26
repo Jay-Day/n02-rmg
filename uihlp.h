@@ -4,8 +4,10 @@
 #include "commctrl.h"
 
 #include <windows.h>
+#include <shellapi.h>
 #include <stdio.h>
 #include <limits.h>
+#include <string.h>
 
 class nTab{
 public:
@@ -162,9 +164,6 @@ public:
 
 
 	inline void re_append(HWND hwnd, char * line, COLORREF color = 0){
-		size_t len = strlen(line);
-		LONG addLen = (len > (size_t)LONG_MAX) ? LONG_MAX : (LONG)len;
-
 		// Preserve the user's selection (p2pkaillera behavior). This prevents the output window
 		// from "stealing" selection when the user highlights/copies text.
 		CHARRANGE prev;
@@ -172,25 +171,76 @@ public:
 
 		CHARRANGE cr;
 		cr.cpMin = GetWindowTextLength(hwnd);
-		cr.cpMax = cr.cpMin + addLen;
+		cr.cpMax = cr.cpMin;
 		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
 
 		CHARFORMATA crf;
 		memset(&crf, 0, sizeof(crf));
 		crf.cbSize = sizeof(crf);
-		crf.dwMask = CFM_COLOR | CFM_EFFECTS;
-		crf.dwEffects = 0;  // Clear CFE_AUTOCOLOR
+		// Important: don't touch CFM_EFFECTS here; auto URL detection uses CFE_LINK and we
+		// don't want to wipe it.
+		crf.dwMask = CFM_COLOR;
 		crf.crTextColor = color;
 
 		SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
 		SendMessage(hwnd, EM_REPLACESEL, FALSE, (LPARAM)line);
-		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
-		SendMessage(hwnd, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&crf);
 
 		// Restore previous selection and scroll to bottom.
 		SendMessage(hwnd, EM_EXSETSEL, 0, (LPARAM)&prev);
 		SendMessage(hwnd, WM_VSCROLL, SB_BOTTOM, 0);
 	}
+
+inline void re_enable_hyperlinks(HWND hwnd){
+	if (hwnd == NULL)
+		return;
+	SendMessage(hwnd, EM_AUTOURLDETECT, TRUE, 0);
+	LRESULT mask = SendMessage(hwnd, EM_GETEVENTMASK, 0, 0);
+	SendMessage(hwnd, EM_SETEVENTMASK, 0, mask | ENM_LINK);
+}
+
+inline bool re_handle_link_click(LPARAM lParam){
+	NMHDR* hdr = (NMHDR*)lParam;
+	if (hdr == NULL)
+		return false;
+	if (hdr->code != EN_LINK)
+		return false;
+
+	ENLINK* enl = (ENLINK*)lParam;
+	if (enl->msg != WM_LBUTTONDOWN)
+		return false;
+
+	LONG chars = enl->chrg.cpMax - enl->chrg.cpMin;
+	if (chars <= 0)
+		return true;
+
+	const LONG kMaxChars = 1023;
+	if (chars > kMaxChars)
+		chars = kMaxChars;
+
+	char link[kMaxChars + 1];
+	link[0] = 0;
+
+	TEXTRANGEA tr;
+	tr.chrg.cpMin = enl->chrg.cpMin;
+	tr.chrg.cpMax = enl->chrg.cpMin + chars;
+	tr.lpstrText = link;
+	SendMessageA(hdr->hwndFrom, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
+	link[kMaxChars] = 0;
+
+	const char* toOpen = link;
+	char withScheme[sizeof(link) + 8];
+	if (_strnicmp(link, "www.", 4) == 0) {
+		memcpy(withScheme, "http://", 7);
+		strncpy(withScheme + 7, link, sizeof(withScheme) - 8);
+		withScheme[sizeof(withScheme) - 1] = 0;
+		toOpen = withScheme;
+	}
+
+	ShellExecuteA(hdr->hwndFrom, "open", toOpen, NULL, NULL, SW_SHOWNORMAL);
+
+	enl->msg = 0;
+	return true;
+}
 
 inline void get_timestamp(char* buffer, size_t size) {
 	SYSTEMTIME st;

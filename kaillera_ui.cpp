@@ -936,7 +936,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_gameslvColumnOrder[3] = 0;
 
 			kaillera_sdlg_partchat = GetDlgItem(hDlg, RE_PART);
-			SendMessage(kaillera_sdlg_partchat, EM_AUTOURLDETECT, TRUE, FALSE);
+			re_enable_hyperlinks(kaillera_sdlg_partchat);
 
 			//Sleep(100);
 			
@@ -959,7 +959,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_JOINMSG_LBL = GetDlgItem(hDlg, IDC_JOINMSG_LBL);
 			LoadJoinMessageSetting();
 
-			SendMessage(kaillera_sdlg_RE_GCHAT, EM_AUTOURLDETECT, TRUE, FALSE);
+			re_enable_hyperlinks(kaillera_sdlg_RE_GCHAT);
 
 
 			kaillera_sdlg_LV_GULIST.AddColumn("Nick", 100);
@@ -1140,6 +1140,8 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			};
 			break;
 			case WM_NOTIFY:
+			if (re_handle_link_click(lParam))
+				break;
 			if(((LPNMHDR)lParam)->code==NM_DBLCLK && ((LPNMHDR)lParam)->hwndFrom==kaillera_sdlg_gameslv.handle){
 				kailelra_sdlg_join_selected_game();
 			}

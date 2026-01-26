@@ -607,11 +607,11 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 				p2p_ui_con_richedit = GetDlgItem(hDlg, IDC_RICHEDIT2);
 				p2p_ui_con_chatinp = GetDlgItem(hDlg, IDC_CHATI);
 				IniaialzeConnectionDialog(hDlg);
-			SendMessage(p2p_ui_con_richedit, EM_AUTOURLDETECT, TRUE, FALSE);
-			p2p_cdlg_timer = SetTimer(hDlg, 0, 1000, 0);
-		}
+				re_enable_hyperlinks(p2p_ui_con_richedit);
+				p2p_cdlg_timer = SetTimer(hDlg, 0, 1000, 0);
+			}
 		
-		break;
+			break;
 		case WM_CLOSE:
 			if (p2p_disconnect()){
 				// Ensure any override doesn't persist across runs
@@ -621,13 +621,13 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 					p2p_ssrv_unenlistgame();
 				}
 
-			KillTimer(hDlg, p2p_cdlg_timer);
-			//kprintf(__FILE__ ":%i", __LINE__);
-			EndDialog(hDlg, 0);
-			p2p_core_cleanup();
-		}
-		KSSDFA.state = 0;
-		break;
+				KillTimer(hDlg, p2p_cdlg_timer);
+				//kprintf(__FILE__ ":%i", __LINE__);
+				EndDialog(hDlg, 0);
+				p2p_core_cleanup();
+			}
+			KSSDFA.state = 0;
+			break;
 	case WM_TIMER:
 		{
 			p2p_cdlg_timer_step++;
@@ -661,6 +661,9 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 			}
 			break;
 		}
+	case WM_NOTIFY:
+		re_handle_link_click(lParam);
+		break;
 	case WM_COMMAND:
 		////kprintf(__FILE__ ":%i", __LINE__);//localhost:27888
 		switch (LOWORD(wParam)) {
@@ -1064,8 +1067,8 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 			}
 		}
 		break;
-	};
-	return 0;
+		};
+		return 0;
 }
 
 void p2p_GUI(){
