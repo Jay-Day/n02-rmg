@@ -293,7 +293,6 @@ int PORT;
 bool COREINIT = false;
 int PING_TIME;
 int p2p_option_smoothing;
-int p2p_option_forcePort;
 int p2p_frame_delay_override;
 int p2p_cdlg_peer_joined;
 int p2p_sdlg_frameno = 0;
@@ -487,9 +486,16 @@ void p2p_ssrv_enlistgame(){
 	p2p_ssrv_send(buf);
 }
 
+static int GetP2PEnlistPort() {
+	int port = p2p_core_get_port();
+	if (port <= 0)
+		port = PORT;
+	return port;
+}
+
 void p2p_ssrv_enlistgamef() {
 	char buf[500];
-	wsprintf(buf, "ENLISP %s|%s|%s|%i", GAME, APP, USERNAME, PORT);
+	wsprintf(buf, "ENLISP %s|%s|%s|%i", GAME, APP, USERNAME, GetP2PEnlistPort());
 	p2p_ssrv_send(buf);
 }
 
@@ -498,11 +504,11 @@ void p2p_ssrv_unenlistgame(){
 }
 
 void p2p_enlist_game() {
-	if (p2p_option_forcePort) {
-		p2p_ssrv_enlistgamef();
-	}
-	else {
+	const int enlistPort = GetP2PEnlistPort();
+	if (enlistPort == 27886) {
 		p2p_ssrv_enlistgame();
+	} else {
+		p2p_ssrv_enlistgamef();
 	}
 }
 
@@ -521,7 +527,7 @@ void p2p_peer_left_callback(){
 	MessageBeep(MB_OK);
 	p2p_core_debug("Peer left");
 	if (HOST && SendMessage(GetDlgItem(p2p_ui_connection_dlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED)
-		p2p_ssrv_enlistgame();
+		p2p_enlist_game();
 }
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -532,7 +538,6 @@ void IniaialzeConnectionDialog(HWND hDlg){
 	if (p2p_core_initialize(HOST, PORT, APP, GAME, USERNAME)){
 		//ShowWindow(GetDlgItem(hDlg, IDC_ADDDELAY), HOST? SW_SHOW:SW_HIDE);
 		ShowWindow(GetDlgItem(hDlg, CHK_ENLIST), HOST ? SW_SHOW : SW_HIDE);
-		ShowWindow(GetDlgItem(hDlg, CHK_ENLISTF), HOST ? SW_SHOW : SW_HIDE);
 		ShowWindow(GetDlgItem(hDlg, IDC_SSERV_WHATSMYIP), HOST ? SW_SHOW : SW_HIDE);
 		ShowWindow(GetDlgItem(hDlg, IDC_HOSTT), HOST ? SW_SHOW : SW_HIDE);
 		ShowWindow(GetDlgItem(hDlg, IDC_P2P_FDLY_LBL), HOST ? SW_SHOW : SW_HIDE);
@@ -644,12 +649,12 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 						p2p_cdlg_peer_joined = 0;
 						flash_window(hDlg);
 					}
-				} else {
-					if (p2p_cdlg_timer_step%30==0 && !p2p_is_connected() && HOST && SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
-						p2p_ssrv_enlistgame();
+					} else {
+						if (p2p_cdlg_timer_step%30==0 && !p2p_is_connected() && HOST && SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
+							p2p_enlist_game();
+						}
 					}
-				}
-			} else if (KSSDFA.state == 2) {
+				} else if (KSSDFA.state == 2) {
 				int jf;
 				if ((jf = p2p_get_frames_count()) != p2p_sdlg_frameno){
 					char xxx[32];
@@ -701,18 +706,16 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 		case IDC_SSERV_WHATSMYIP:
 			p2p_ssrv_whatismyip();
 			break;
-		case IDC_READY:
-			{
-				p2p_set_ready(SendMessage(GetDlgItem(hDlg, IDC_READY), BM_GETCHECK, 0, 0)==BST_CHECKED);
-			}
-			break;
-		case CHK_ENLISTF:
-			p2p_option_forcePort = SendMessage(GetDlgItem(hDlg, CHK_ENLISTF), BM_GETCHECK, 0, 0) == BST_CHECKED ? 1 : 0;
-		case CHK_ENLIST:
-			{
-				if (SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
-					p2p_enlist_game();
-				} else {
+			case IDC_READY:
+				{
+					p2p_set_ready(SendMessage(GetDlgItem(hDlg, IDC_READY), BM_GETCHECK, 0, 0)==BST_CHECKED);
+				}
+				break;
+			case CHK_ENLIST:
+				{
+					if (SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
+						p2p_enlist_game();
+					} else {
 					p2p_ssrv_unenlistgame();
 				}
 			}
