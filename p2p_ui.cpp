@@ -3,6 +3,7 @@
 #include "common/nSettings.h"
 #include "p2p_ui.h"
 #include <windows.h>
+#include <ctype.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -177,6 +178,31 @@ void flash_window(HWND handle) {
 
 static bool g_p2p_ssrv_copy_myip_pending = false;
 
+static const char* kN02TraversalHost = "103.101.203.41";
+static const int kN02TraversalPort = 6264;
+
+static bool g_p2p_trav_host_enabled = false;
+static bool g_p2p_trav_join_enabled = false;
+static char g_p2p_trav_code[32] = { 0 };
+static char g_p2p_trav_token[64] = { 0 };
+
+static DWORD g_p2p_trav_next_reg_ms = 0;
+static DWORD g_p2p_trav_next_keep_ms = 0;
+
+static DWORD g_p2p_trav_next_join_ms = 0;
+static DWORD g_p2p_trav_join_deadline_ms = 0;
+static char g_p2p_trav_join_code[32] = { 0 };
+static bool g_p2p_trav_join_got_host = false;
+static char g_p2p_trav_join_token[64] = { 0 };
+static char g_p2p_trav_join_host_ip[32] = { 0 };
+static int g_p2p_trav_join_host_port = 0;
+static DWORD g_p2p_trav_next_connect_ms = 0;
+
+static char g_p2p_trav_host_peer_ip[32] = { 0 };
+static int g_p2p_trav_host_peer_port = 0;
+static DWORD g_p2p_trav_host_peer_deadline_ms = 0;
+static DWORD g_p2p_trav_next_host_punch_ms = 0;
+
 static void CopyTextToClipboard(HWND owner, const char* text) {
 	if (text == NULL || *text == 0)
 		return;
@@ -202,6 +228,118 @@ static void CopyTextToClipboard(HWND owner, const char* text) {
 	}
 
 	CloseClipboard();
+}
+
+static bool LooksLikeTraversalCode(const char* s) {
+	if (s == NULL || *s == 0)
+		return false;
+
+	// Avoid treating hostnames (e.g. "example.com") as codes.
+	for (const char* p = s; *p; p++) {
+		if (*p == '.' || *p == ':' || *p == '/')
+			return false;
+	}
+
+	int alnumCount = 0;
+	for (const char* p = s; *p; p++) {
+		unsigned char ch = (unsigned char)*p;
+		if (isalnum(ch)) {
+			alnumCount++;
+			continue;
+		}
+		if (*p == '-' || *p == '_')
+			continue;
+		return false;
+	}
+
+	if (alnumCount < 6 || alnumCount > 16)
+		return false;
+
+	return true;
+}
+
+static void p2p_trav_reset_state() {
+	g_p2p_trav_host_enabled = false;
+	g_p2p_trav_join_enabled = false;
+	g_p2p_trav_code[0] = 0;
+	g_p2p_trav_token[0] = 0;
+	g_p2p_trav_next_reg_ms = 0;
+	g_p2p_trav_next_keep_ms = 0;
+	g_p2p_trav_next_join_ms = 0;
+	g_p2p_trav_join_deadline_ms = 0;
+	g_p2p_trav_join_code[0] = 0;
+	g_p2p_trav_join_got_host = false;
+	g_p2p_trav_join_token[0] = 0;
+	g_p2p_trav_join_host_ip[0] = 0;
+	g_p2p_trav_join_host_port = 0;
+	g_p2p_trav_next_connect_ms = 0;
+	g_p2p_trav_host_peer_ip[0] = 0;
+	g_p2p_trav_host_peer_port = 0;
+	g_p2p_trav_host_peer_deadline_ms = 0;
+	g_p2p_trav_next_host_punch_ms = 0;
+}
+
+static void p2p_trav_send_to_server(const char* msg) {
+	if (msg == NULL || *msg == 0)
+		return;
+
+	size_t msgLen = strlen(msg);
+	if (msgLen == 0 || msgLen > (size_t)INT_MAX)
+		return;
+
+	outpf("NAT traversal -> %s:%i: %s", kN02TraversalHost, kN02TraversalPort, msg);
+
+	// IMPORTANT: traversal messages must NOT include the trailing NUL byte.
+	p2p_send_ssrv_packet((char*)msg, (int)msgLen, (char*)kN02TraversalHost, kN02TraversalPort);
+}
+
+static void p2p_trav_send_reg() {
+	char msg[128];
+	_snprintf_s(msg, sizeof(msg), _TRUNCATE, "N02TRAV1|REG|%u", (unsigned int)GetTickCount());
+	p2p_trav_send_to_server(msg);
+}
+
+static void p2p_trav_send_keep() {
+	if (g_p2p_trav_token[0] == 0)
+		return;
+	char msg[128];
+	_snprintf_s(msg, sizeof(msg), _TRUNCATE, "N02TRAV1|KEEP|%s", g_p2p_trav_token);
+	p2p_trav_send_to_server(msg);
+}
+
+static void p2p_trav_send_close() {
+	if (g_p2p_trav_token[0] == 0)
+		return;
+	char msg[128];
+	_snprintf_s(msg, sizeof(msg), _TRUNCATE, "N02TRAV1|CLOSE|%s", g_p2p_trav_token);
+	p2p_trav_send_to_server(msg);
+}
+
+static void p2p_trav_send_join() {
+	if (g_p2p_trav_join_code[0] == 0)
+		return;
+	char msg[160];
+	_snprintf_s(msg, sizeof(msg), _TRUNCATE, "N02TRAV1|JOIN|%s|%u", g_p2p_trav_join_code, (unsigned int)GetTickCount());
+	p2p_trav_send_to_server(msg);
+}
+
+static void p2p_trav_punch_endpoint(const char* hostIp, int hostPort, const char* token) {
+	if (hostIp == NULL || *hostIp == 0 || hostPort <= 0)
+		return;
+	if (token == NULL)
+		token = "";
+
+	outpf("NAT traversal -> %s:%i: punch x10", hostIp, hostPort);
+
+	char msg[160];
+	_snprintf_s(msg, sizeof(msg), _TRUNCATE, "N02TRAV1|PUNCH|%s", token);
+	const int sendLen = (int)strlen(msg);
+	if (sendLen <= 0)
+		return;
+
+	for (int i = 0; i < 10; i++) {
+		p2p_send_ssrv_packet(msg, sendLen, (char*)hostIp, hostPort);
+	}
 }
 
 static bool TryExtractIPv4AndPort(const char* s, char* out_ip, size_t out_ip_len, int* out_port) {
@@ -458,6 +596,126 @@ void p2p_ssrv_packet_recv_callback(char *cmd, int len, void *sadr){
 		cmd = cmd_buf;
 	}
 
+	// NAT traversal (N02TRAV1) uses the same "raw/SSRV" UDP path.
+	if (strncmp(cmd, "N02TRAV1|", 9) == 0) {
+		char originalCmd[2048];
+		strncpy(originalCmd, cmd, sizeof(originalCmd) - 1);
+		originalCmd[sizeof(originalCmd) - 1] = 0;
+
+		// Split in-place.
+		char* parts[8] = { 0 };
+		int partCount = 0;
+		parts[partCount++] = cmd;
+		for (char* p = cmd; *p && partCount < (int)(sizeof(parts) / sizeof(parts[0])); p++) {
+			if (*p == '|') {
+				*p = 0;
+				parts[partCount++] = p + 1;
+			}
+		}
+
+		if (partCount >= 2) {
+			const char* type = parts[1];
+
+			if (strcmp(type, "REGOK") == 0 && partCount >= 6) {
+				if (!g_p2p_trav_host_enabled) {
+					outpf("NAT traversal <- REGOK (ignored; not hosting-by-code)");
+					return;
+				}
+
+				strncpy(g_p2p_trav_code, parts[2], sizeof(g_p2p_trav_code) - 1);
+				g_p2p_trav_code[sizeof(g_p2p_trav_code) - 1] = 0;
+				strncpy(g_p2p_trav_token, parts[3], sizeof(g_p2p_trav_token) - 1);
+				g_p2p_trav_token[sizeof(g_p2p_trav_token) - 1] = 0;
+
+				outpf("NAT traversal <- REGOK code=%s observed=%s:%s", g_p2p_trav_code, parts[4], parts[5]);
+				CopyTextToClipboard(p2p_ui_connection_dlg, g_p2p_trav_code);
+				outpf("Copied connect code to clipboard");
+
+				// Start keepalive cadence.
+				g_p2p_trav_next_keep_ms = 0;
+				return;
+			}
+
+			if (strcmp(type, "HOST") == 0 && partCount >= 5) {
+				if (!g_p2p_trav_join_enabled) {
+					outpf("NAT traversal <- HOST (ignored; not joining-by-code)");
+					return;
+				}
+
+				const char* token = parts[2];
+				const char* hostIp = parts[3];
+				const int hostPort = atoi(parts[4]);
+
+				outpf("NAT traversal <- HOST %s:%i", hostIp, hostPort);
+				strncpy(g_p2p_trav_join_token, token, sizeof(g_p2p_trav_join_token) - 1);
+				g_p2p_trav_join_token[sizeof(g_p2p_trav_join_token) - 1] = 0;
+				strncpy(g_p2p_trav_join_host_ip, hostIp, sizeof(g_p2p_trav_join_host_ip) - 1);
+				g_p2p_trav_join_host_ip[sizeof(g_p2p_trav_join_host_ip) - 1] = 0;
+				g_p2p_trav_join_host_port = hostPort;
+				g_p2p_trav_join_got_host = true;
+
+				// Stop asking the server once we have a host endpoint; we may still need to retry the actual P2P handshake.
+				g_p2p_trav_next_join_ms = 0;
+
+				// Try immediately (and WM_TIMER will retry for a short window if needed).
+				outpf("NAT traversal: connecting to %s:%i", g_p2p_trav_join_host_ip, g_p2p_trav_join_host_port);
+				p2p_trav_punch_endpoint(g_p2p_trav_join_host_ip, g_p2p_trav_join_host_port, g_p2p_trav_join_token);
+				if (!p2p_core_connect(g_p2p_trav_join_host_ip, g_p2p_trav_join_host_port)) {
+					outpf("NAT traversal: error connecting to %s:%i", g_p2p_trav_join_host_ip, g_p2p_trav_join_host_port);
+				}
+
+				return;
+			}
+
+			if (strcmp(type, "PEER") == 0 && partCount >= 5) {
+				if (!g_p2p_trav_host_enabled) {
+					outpf("NAT traversal <- PEER (ignored; not hosting-by-code)");
+					return;
+				}
+
+				const char* token = parts[2];
+				const char* peerIp = parts[3];
+				const int peerPort = atoi(parts[4]);
+
+				if (g_p2p_trav_token[0] != 0 && strcmp(token, g_p2p_trav_token) != 0) {
+					outpf("NAT traversal: ignoring PEER for unknown token");
+					return;
+				}
+
+				outpf("NAT traversal <- PEER %s:%i", peerIp, peerPort);
+				outpf("NAT traversal: peer %s:%i", peerIp, peerPort);
+
+				strncpy(g_p2p_trav_host_peer_ip, peerIp, sizeof(g_p2p_trav_host_peer_ip) - 1);
+				g_p2p_trav_host_peer_ip[sizeof(g_p2p_trav_host_peer_ip) - 1] = 0;
+				g_p2p_trav_host_peer_port = peerPort;
+				g_p2p_trav_host_peer_deadline_ms = GetTickCount() + 15000;
+				g_p2p_trav_next_host_punch_ms = 0;
+
+				p2p_trav_punch_endpoint(peerIp, peerPort, token);
+				return;
+			}
+
+			if (strcmp(type, "ERR") == 0 && partCount >= 3) {
+				outpf("NAT traversal <- ERR %s", parts[2]);
+				outpf("NAT traversal: server response was: %s", originalCmd);
+				return;
+			}
+
+			if (strcmp(type, "OK") == 0) {
+				outpf("NAT traversal <- OK");
+				return;
+			}
+
+			// No-op payload used only to open NAT mappings; can be frequent.
+			if (strcmp(type, "PUNCH") == 0) {
+				return;
+			}
+		}
+
+		outpf("NAT traversal <- (unhandled) %s", originalCmd);
+		return;
+	}
+
 	if (strcmp(cmd, "PINGRQ")==0){
 		p2p_send_ssrv_packet("xxxxxxxxxx",11, sadr);
 		return;
@@ -550,9 +808,22 @@ void IniaialzeConnectionDialog(HWND hDlg){
 		
 		if (HOST) {
 			outpf("Hosting %s on port %i", GAME, p2p_core_get_port());
-			outpf("WARNING: Hosting requires hosting ports to be forwarded and enabled in firewalls.");
+			if (g_p2p_trav_host_enabled) {
+				outpf("NAT traversal: enabled (share the connect code once it appears).");
+				p2p_trav_send_reg();
+				g_p2p_trav_next_reg_ms = GetTickCount() + 3000;
+			} else {
+				outpf("WARNING: Hosting requires hosting ports to be forwarded and enabled in firewalls.");
+			}
 			SetDlgItemText(hDlg, IDC_GAME, GAME);
 		} else {
+
+			if (g_p2p_trav_join_enabled) {
+				outpf("NAT traversal: looking up host for code %s", g_p2p_trav_join_code);
+				p2p_trav_send_join();
+				g_p2p_trav_next_join_ms = GetTickCount() + 3000;
+				g_p2p_trav_join_deadline_ms = GetTickCount() + 15000;
+			} else {
 
 			char * host;
 			host = IP;
@@ -574,6 +845,7 @@ void IniaialzeConnectionDialog(HWND hDlg){
 				return;
 			}
 
+			}
 		}
 		
 		COREINIT = true;
@@ -639,6 +911,11 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 				p2p_frame_delay_override = 0;
 				p2p_30fps_mode = 0;
 
+				if (HOST && g_p2p_trav_host_enabled) {
+					p2p_trav_send_close();
+				}
+				p2p_trav_reset_state();
+
 				if (SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
 					p2p_ssrv_unenlistgame();
 				}
@@ -653,6 +930,56 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 	case WM_TIMER:
 		{
 			p2p_cdlg_timer_step++;
+
+			// NAT traversal housekeeping (host keepalive / join retries)
+			const DWORD now = GetTickCount();
+			if (HOST && g_p2p_trav_host_enabled) {
+				if (g_p2p_trav_token[0] == 0) {
+					if (g_p2p_trav_next_reg_ms == 0 || now >= g_p2p_trav_next_reg_ms) {
+						p2p_trav_send_reg();
+						g_p2p_trav_next_reg_ms = now + 3000;
+					}
+				} else {
+					if (g_p2p_trav_next_keep_ms == 0 || now >= g_p2p_trav_next_keep_ms) {
+						p2p_trav_send_keep();
+						g_p2p_trav_next_keep_ms = now + 10000;
+					}
+				}
+				// While waiting for the peer's initial LOGN_REQ, keep punching their endpoint for a short window.
+				if (!p2p_is_connected() &&
+					g_p2p_trav_host_peer_ip[0] != 0 &&
+					g_p2p_trav_host_peer_port > 0 &&
+					g_p2p_trav_host_peer_deadline_ms != 0 &&
+					now < g_p2p_trav_host_peer_deadline_ms) {
+					if (g_p2p_trav_next_host_punch_ms == 0 || now >= g_p2p_trav_next_host_punch_ms) {
+						p2p_trav_punch_endpoint(g_p2p_trav_host_peer_ip, g_p2p_trav_host_peer_port, g_p2p_trav_token);
+						g_p2p_trav_next_host_punch_ms = now + 1000;
+					}
+				}
+			} else if (!HOST && g_p2p_trav_join_enabled && !p2p_is_connected()) {
+				if (g_p2p_trav_join_deadline_ms != 0 && now >= g_p2p_trav_join_deadline_ms) {
+					outpf("NAT traversal: timed out (try direct IP/port-forwarding or server mode)");
+					g_p2p_trav_join_enabled = false;
+				} else if (!g_p2p_trav_join_got_host) {
+					if (g_p2p_trav_next_join_ms == 0 || now >= g_p2p_trav_next_join_ms) {
+						p2p_trav_send_join();
+						g_p2p_trav_next_join_ms = now + 3000;
+					}
+				} else {
+					// We have a host endpoint; retry the punch + LOGN_REQ a few times (first packet is often dropped
+					// if the host NAT hasn't seen an outbound packet to us yet).
+					if (g_p2p_trav_next_connect_ms == 0 || now >= g_p2p_trav_next_connect_ms) {
+						p2p_trav_punch_endpoint(g_p2p_trav_join_host_ip, g_p2p_trav_join_host_port, g_p2p_trav_join_token);
+						p2p_core_connect(g_p2p_trav_join_host_ip, g_p2p_trav_join_host_port);
+						g_p2p_trav_next_connect_ms = now + 1000;
+					}
+				}
+			} else if (!HOST && g_p2p_trav_join_enabled && p2p_is_connected()) {
+				// Connected; stop traversal retries.
+				g_p2p_trav_join_enabled = false;
+				g_p2p_trav_join_deadline_ms = 0;
+			}
+
 			if (KSSDFA.state == 0) {
 				if (p2p_is_connected()){
 					SetDlgItemText(hDlg, IDC_GAME, GAME);
@@ -743,8 +1070,11 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 }
 ///////////////////////////////////////////////////
 
-void InitializeP2PSubsystem(HWND hDlg, bool host){
+void InitializeP2PSubsystem(HWND hDlg, bool host, bool hostByCode){
 	ShowWindow(p2p_ui_ss_dlg, SW_HIDE);
+
+	p2p_trav_reset_state();
+	g_p2p_trav_host_enabled = host && hostByCode;
 
 	HOST = host;
 
@@ -759,6 +1089,12 @@ void InitializeP2PSubsystem(HWND hDlg, bool host){
 	GetWindowText(GetDlgItem(p2p_ui_ss_dlg, IDC_USRNAME), USERNAME, 31);
 
 	StripSpacesInPlace(IP);
+
+	if (!HOST && LooksLikeTraversalCode(IP)) {
+		g_p2p_trav_join_enabled = true;
+		strncpy(g_p2p_trav_join_code, IP, sizeof(g_p2p_trav_join_code) - 1);
+		g_p2p_trav_join_code[sizeof(g_p2p_trav_join_code) - 1] = 0;
+	}
 
 	//kprintf(__FILE__ ":%i", __LINE__);//localhost:27888
 
@@ -786,6 +1122,11 @@ void InitializeP2PSubsystem(HWND hDlg, bool host){
 	ShowWindow(p2p_ui_ss_dlg, SW_SHOW);
 }
 
+// Backwards-compat wrapper for other modules (e.g. waiting-games dialog).
+void InitializeP2PSubsystem(HWND hDlg, bool host) {
+	InitializeP2PSubsystem(hDlg, host, false);
+}
+
 
 ///////////////////////////////////////////////////////////////
 #define P2PSelectionDialogProcSetModee(hDlg, ITEM, Mode) ShowWindow(GetDlgItem(hDlg, ITEM), Mode);
@@ -808,6 +1149,7 @@ void P2PSelectionDialogProcSetMode(HWND hDlg, bool connector){
 		//P2PSelectionDialogProcSetModee(hDlg, BTN_SSRVWG, SW_SHOW);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_GAMEL, SW_HIDE);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_GAME, SW_HIDE);
+		P2PSelectionDialogProcSetModee(hDlg, IDC_HOST_CODE, SW_HIDE);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_HOST, SW_HIDE);
 		
 
@@ -828,6 +1170,7 @@ void P2PSelectionDialogProcSetMode(HWND hDlg, bool connector){
 		//P2PSelectionDialogProcSetModee(hDlg, BTN_SSRVWG, SW_HIDE);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_GAMEL, SW_SHOW);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_GAME, SW_SHOW);
+		P2PSelectionDialogProcSetModee(hDlg, IDC_HOST_CODE, SW_SHOW);
 		P2PSelectionDialogProcSetModee(hDlg, IDC_HOST, SW_SHOW);
 
 	}
@@ -1042,10 +1385,13 @@ LRESULT CALLBACK P2PSelectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 		case WM_COMMAND:
 			switch (LOWORD(wParam)) {
 			case IDC_CONNECT:
-				InitializeP2PSubsystem(hDlg, false);
+				InitializeP2PSubsystem(hDlg, false, false);
 				break;
 			case IDC_HOST:
-				InitializeP2PSubsystem(hDlg, true);
+				InitializeP2PSubsystem(hDlg, true, false);
+				break;
+			case IDC_HOST_CODE:
+				InitializeP2PSubsystem(hDlg, true, true);
 				break;
 		case IDC_ADD:
 			P2PStoredUsersListAdd();
