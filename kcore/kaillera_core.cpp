@@ -52,6 +52,7 @@ KAILLERAC_ KAILLERAC;
 
 // Helper function to send a pong response
 static void SendPong() {
+	if (!KAILLERAC.connection) return;
 	k_instruction pong;
 	pong.type = USERPONG;
 	int x = 0;
@@ -95,35 +96,40 @@ bool kaillera_core_cleanup(){
 			free(KAILLERAC.kaillera_incoming_data_cache[0]);
 			KAILLERAC.kaillera_incoming_data_cache.removei(0);
 		}
-		
+
 		while (KAILLERAC.kaillera_gv_queue.length>0) {
 			free(KAILLERAC.kaillera_gv_queue[0]);
 			KAILLERAC.kaillera_gv_queue.removei(0);
 		}
 
 		kaillera_core_initialized = false;
+	}
 
-	} return true;
+	// Always reset state on cleanup
+	KAILLERAC.USERSTAT = 0;
+	KAILLERAC.PLAYERSTAT = -1;
+	KAILLERAC.game_id_requested = false;
+	KAILLERAC.user_id_requested = false;
+	KAILLERAC.leave_game_requested = false;
+	KAILLERAC.has_dropped = false;
+	KAILLERAC.pending_spoof_announce = false;
+
+	return true;
 }
 
 bool kaillera_disconnect(char * quitmsg){
 	n02_TRACE();
-	if (KAILLERAC.USERSTAT >= 1) {
-		if (KAILLERAC.USERSTAT > 1) {
-			k_instruction ls;
-			ls.type = USERLEAV;
-			ls.store_short(-1);
-			ls.store_string(quitmsg);
-			KAILLERAC.connection->send_instruction(&ls);
-			KAILLERAC.USERSTAT = 0;
-			KAILLERAC.PLAYERSTAT = -1;
-			return true;
-		}
-	} else {
-		KAILLERAC.USERSTAT = 0;
-		KAILLERAC.PLAYERSTAT = -1;
-		return true;
+	// Send leave message if connected and logged in
+	if (KAILLERAC.USERSTAT > 1 && KAILLERAC.connection) {
+		k_instruction ls;
+		ls.type = USERLEAV;
+		ls.store_short(-1);
+		ls.store_string(quitmsg);
+		KAILLERAC.connection->send_instruction(&ls);
 	}
+	// Always reset state
+	KAILLERAC.USERSTAT = 0;
+	KAILLERAC.PLAYERSTAT = -1;
 	return true;
 }
 
@@ -141,9 +147,19 @@ void kaillera_set_spoof_ping(int spoof_ping_ms) {
 
 bool kaillera_core_initialize(int port, char * appname, char * username, char connection_setting){
 	p2p_InitializeTime();
-	
+
 	if (kaillera_core_initialized) kaillera_core_cleanup();
-	
+
+	// Reset all state
+	KAILLERAC.USERSTAT = 0;
+	KAILLERAC.PLAYERSTAT = -1;
+	KAILLERAC.game_id_requested = false;
+	KAILLERAC.user_id_requested = false;
+	KAILLERAC.leave_game_requested = false;
+	KAILLERAC.has_dropped = false;
+	KAILLERAC.pending_spoof_announce = false;
+	KAILLERAC.owner = false;
+
 	KAILLERAC.PORT = port;
 	KAILLERAC.conset = connection_setting;
 
@@ -151,9 +167,11 @@ bool kaillera_core_initialize(int port, char * appname, char * username, char co
 	KAILLERAC.APP[sizeof(KAILLERAC.APP) - 1] = 0;
 	strncpy(KAILLERAC.USERNAME, (username != NULL) ? username : "", sizeof(KAILLERAC.USERNAME) - 1);
 	KAILLERAC.USERNAME[sizeof(KAILLERAC.USERNAME) - 1] = 0;
-	
+
 	KAILLERAC.connection = new k_message;
 	if (!KAILLERAC.connection->initialize(KAILLERAC.PORT)){
+		delete KAILLERAC.connection;
+		KAILLERAC.connection = 0;
 		return false;
 	}
 	KAILLERAC.PORT = KAILLERAC.connection->get_port();
@@ -510,7 +528,7 @@ void kaillera_step(){
 			kaillera_chat_send(spoof_msg);
 		}
 	}
-	if (KAILLERAC.USERSTAT > 1 && p2p_GetTime() - KAILLERAC.tmoutrsttime > KAILLERA_TIMEOUT_RESET) {
+	if (KAILLERAC.USERSTAT > 1 && KAILLERAC.connection && p2p_GetTime() - KAILLERAC.tmoutrsttime > KAILLERA_TIMEOUT_RESET) {
 		KAILLERAC.tmoutrsttime = p2p_GetTime();
 		k_instruction trst;
 		trst.type = TMOUTRST;
@@ -520,7 +538,7 @@ void kaillera_step(){
 }
 
 void kaillera_chat_send(char * text) {
-	if (KAILLERAC.USERSTAT > 1) {
+	if (KAILLERAC.USERSTAT > 1 && KAILLERAC.connection) {
 		k_instruction sgc;
 		sgc.type = PARTCHAT;
 		sgc.store_string(text);
@@ -528,7 +546,7 @@ void kaillera_chat_send(char * text) {
 	}
 }
 void kaillera_game_chat_send(char * text) {
-	if (KAILLERAC.USERSTAT > 1) {
+	if (KAILLERAC.USERSTAT > 1 && KAILLERAC.connection) {
 		k_instruction sgc;
 		sgc.type = GAMECHAT;
 		sgc.store_string(text);
@@ -538,7 +556,7 @@ void kaillera_game_chat_send(char * text) {
 
 
 void kaillera_kick_user (unsigned short id) {
-	if (KAILLERAC.USERSTAT > 1) {
+	if (KAILLERAC.USERSTAT > 1 && KAILLERAC.connection) {
 		k_instruction sgc;
 		sgc.type = GAMRKICK;
 		sgc.store_short(id);
@@ -547,6 +565,8 @@ void kaillera_kick_user (unsigned short id) {
 }
 
 void kaillera_join_game(unsigned int id){
+	if (!KAILLERAC.connection) return;
+
 	KAILLERAC.game_id_requested = false;
 	KAILLERAC.game_id = id;
 	KAILLERAC.leave_game_requested = false;
@@ -561,10 +581,12 @@ void kaillera_join_game(unsigned int id){
 	jog.store_int(0);
 	jog.store_short(-1);
 	jog.store_char(KAILLERAC.conset);
-	
-	KAILLERAC.connection->send_instruction(&jog);;
+
+	KAILLERAC.connection->send_instruction(&jog);
 }
 void kaillera_create_game(char * name) {
+	if (!KAILLERAC.connection) return;
+
 	strncpy(KAILLERAC.GAME, (name != NULL) ? name : "", sizeof(KAILLERAC.GAME) - 1);
 	KAILLERAC.GAME[sizeof(KAILLERAC.GAME) - 1] = 0;
 	KAILLERAC.game_id_requested = true;
@@ -577,15 +599,17 @@ void kaillera_create_game(char * name) {
 
 	KAILLERAC.owner = true;
 
-	KAILLERAC.connection->send_instruction(&cg);;
+	KAILLERAC.connection->send_instruction(&cg);
 }
 
 void kaillera_leave_game (){
 	KAILLERAC.leave_game_requested = true;
-	k_instruction lg;
-	lg.type = INSTRUCTION_GAMRLEAV;
-	lg.store_short(-1);
-	KAILLERAC.connection->send_instruction(&lg);
+	if (KAILLERAC.connection) {
+		k_instruction lg;
+		lg.type = INSTRUCTION_GAMRLEAV;
+		lg.store_short(-1);
+		KAILLERAC.connection->send_instruction(&lg);
+	}
 
 	// Notify RMG to stop emulation (same as dropping)
 	kaillera_player_dropped_callback(KAILLERAC.USERNAME, KAILLERAC.playerno);
@@ -598,11 +622,13 @@ void kaillera_leave_game (){
 void kaillera_start_game() {
 	KAILLERAC.leave_game_requested = false;
 
-	// Always send GAMEBEGN to server first - this notifies other players
-	k_instruction kx;
-	kx.type = INSTRUCTION_GAMEBEGN;
-	kx.store_int(-1);
-	KAILLERAC.connection->send_instruction(&kx);
+	if (KAILLERAC.connection) {
+		// Always send GAMEBEGN to server first - this notifies other players
+		k_instruction kx;
+		kx.type = INSTRUCTION_GAMEBEGN;
+		kx.store_int(-1);
+		KAILLERAC.connection->send_instruction(&kx);
+	}
 
 	// If restarting after a drop, also trigger local start via state machine
 	// The server might ignore GAMEBEGN for us, but it should notify other players
@@ -614,11 +640,13 @@ void kaillera_start_game() {
 }
 void kaillera_game_drop(){
 	KAILLERAC.leave_game_requested = false;
-	k_instruction kx;
-	kx.type=GAMRDROP;
-	kx.store_char(0);  // First byte (matches Supraclient)
-	kx.store_char(0);  // Second byte (matches Supraclient)
-	KAILLERAC.connection->send_instruction(&kx);
+	if (KAILLERAC.connection) {
+		k_instruction kx;
+		kx.type=GAMRDROP;
+		kx.store_char(0);  // First byte (matches Supraclient)
+		kx.store_char(0);  // Second byte (matches Supraclient)
+		KAILLERAC.connection->send_instruction(&kx);
+	}
 	// Notify RMG that the local player dropped (must be before PLAYERSTAT=0)
 	kaillera_player_dropped_callback(KAILLERAC.USERNAME, KAILLERAC.playerno);
 	KAILLERAC.PLAYERSTAT = 0;
@@ -628,11 +656,13 @@ void kaillera_game_drop(){
 
 void kaillera_end_game(){
 	//kaillera_core_debug("kailleraEndGame");
-	k_instruction kx;
-	kx.type = GAMRDROP;
-	kx.store_char(0);  // First byte (matches Supraclient)
-	kx.store_char(0);  // Second byte (matches Supraclient)
-	KAILLERAC.connection->send_instruction(&kx);
+	if (KAILLERAC.connection) {
+		k_instruction kx;
+		kx.type = GAMRDROP;
+		kx.store_char(0);  // First byte (matches Supraclient)
+		kx.store_char(0);  // Second byte (matches Supraclient)
+		KAILLERAC.connection->send_instruction(&kx);
+	}
 	kaillera_end_game_callback();
 }
 bool kaillera_is_game_running(){
@@ -642,6 +672,11 @@ bool kaillera_is_game_running(){
 
 inline void kaillera_GameStartSequence(int size){
 	n02_TRACE();
+	if (!KAILLERAC.connection) {
+		KAILLERAC.PLAYERSTAT = 0;
+		return;
+	}
+
 	KAILLERAC.DATALEN = size;
 	KAILLERAC.REQDATALEN = size * KAILLERAC.conset;
 	KAILLERAC.USERDATA.reset();
@@ -664,8 +699,8 @@ inline void kaillera_GameStartSequence(int size){
 	DWORD ti = p2p_GetTime();
 	DWORD tit = KAILLERA_TIMEOUT_NETSYNC_RETR_INTERVAL + ti;
 	KAILLERAC.connection->send_instruction(&kx);
-	while (KAILLERAC.PLAYERSTAT == 1) {
-		if (k_socket::check_sockets(0,100) && KAILLERAC.connection->has_data()){
+	while (KAILLERAC.PLAYERSTAT == 1 && KAILLERAC.connection) {
+		if (k_socket::check_sockets(0,100) && KAILLERAC.connection && KAILLERAC.connection->has_data()){
 			k_instruction ki;
 			sockaddr_in saddr;
 			if (KAILLERAC.connection->receive_instruction(&ki, false, &saddr)){
@@ -684,7 +719,7 @@ inline void kaillera_GameStartSequence(int size){
 			break;
 		} else {
 			kaillera_game_netsync_wait_callback(KAILLERA_TIMEOUT_NETSYNC - tx);
-			if (tit <= ti) {
+			if (tit <= ti && KAILLERAC.connection) {
 				tit = KAILLERA_TIMEOUT_NETSYNC_RETR_INTERVAL + ti;
 				KAILLERAC.connection->resend_message(5);
 			}
@@ -752,10 +787,12 @@ inline void kaillera_ProcessGameInstruction(k_instruction * ki) {
 
 int kaillera_modify_play_values (void * values, int size) {
 	n02_TRACE();
+	if (!KAILLERAC.connection) return -1;
+
 	if (KAILLERAC.USERSTAT > 2 && KAILLERAC.PLAYERSTAT > 0) {
 		if (KAILLERAC.PLAYERSTAT == 2) {
 			KAILLERAC.USERDATA.put_data(values, size);
-			if (KAILLERAC.USERDATA.pos >= KAILLERAC.REQDATALEN){
+			if (KAILLERAC.USERDATA.pos >= KAILLERAC.REQDATALEN && KAILLERAC.connection){
 				//outgoing caching goes here
 				k_instruction kx;
 				kx.type = GAMEDATA;
@@ -767,7 +804,8 @@ int kaillera_modify_play_values (void * values, int size) {
 			int pix = 0;
 			int ttx = 0;
 			do {
-				if (KAILLERAC.connection->has_data() || (k_socket::check_sockets(0,pix) && KAILLERAC.connection->has_data())){
+				if (!KAILLERAC.connection) return -1;
+				if (KAILLERAC.connection->has_data() || (k_socket::check_sockets(0,pix) && KAILLERAC.connection && KAILLERAC.connection->has_data())){
 					k_instruction ki;
 					sockaddr_in saddr;
 					if (KAILLERAC.connection->receive_instruction(&ki, false, &saddr)){
@@ -786,7 +824,8 @@ int kaillera_modify_play_values (void * values, int size) {
 						DWORD tttx = p2p_GetTime();
 						if (tttx - ttx > 10) {
 							ttx = tttx;
-							KAILLERAC.connection->resend_message(5);
+							if (KAILLERAC.connection)
+								KAILLERAC.connection->resend_message(5);
 							pix++;
 							if (pix == 500){
 								kaillera_core_debug("Lost Connection");
@@ -796,7 +835,7 @@ int kaillera_modify_play_values (void * values, int size) {
 						}
 					}
 				}
-			} while ((KAILLERAC.kaillera_gv_queue.length <= 0) && KAILLERAC.PLAYERSTAT > 1);
+			} while ((KAILLERAC.kaillera_gv_queue.length <= 0) && KAILLERAC.PLAYERSTAT > 1 && KAILLERAC.connection);
 			if (KAILLERAC.PLAYERSTAT > 1 && KAILLERAC.kaillera_gv_queue.length > 0) {
 				char * kd = KAILLERAC.kaillera_gv_queue[0];
 				KAILLERAC.kaillera_gv_queue.removei(0);
