@@ -1,8 +1,19 @@
 #pragma once
 
-#define N02_VER "v0.5r1"
+// Preprocessor stringification macros
+#define N02_STRINGIFY(x) #x
+#define N02_TOSTRING(x) N02_STRINGIFY(x)
+
+// Use GIT_REVISION from CI build if available, otherwise use default
+#ifdef GIT_REVISION
+#define N02_VER N02_TOSTRING(GIT_REVISION)
+#else
+#define N02_VER "dev"
+#endif
+
 #define N02_COMP_VER "kaillera 0.9"
-#define KAILLERA_VERSION N02_VER " (" N02_COMP_VER " compatible) - " __DATE__
+#define KAILLERA_VERSION N02_VER " (" N02_COMP_VER " compatible)"
+#define N02_WINDOW_TITLE "N02 " N02_VER
 
 int kaillera_ping_server(char * host, int port, int limit = 1000);
 void kaillera_step();

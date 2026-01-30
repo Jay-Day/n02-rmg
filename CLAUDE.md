@@ -11,11 +11,11 @@ N02 is a Kaillera client DLL implementation that provides netplay functionality 
 
 ## Build Commands
 
-### Windows (Visual Studio)
+### Local Build (Preferred)
 ```bash
-# Build using the included batch script (auto-detects VS2019/2022/2026)
 ./build.bat
 ```
+This is the standard way to build locally. The script auto-detects VS2019/2022/2026 and runs MSBuild with the correct settings.
 
 The build script automatically finds MSBuild from:
 - VS2026 Community/Professional/Enterprise (v145 toolset)

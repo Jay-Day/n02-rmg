@@ -1,9 +1,11 @@
 #pragma once
 
+#include "../kcore/kaillera_core.h"
+
 #define P2P_CHAT_BUFFER_LEN 32
 #define P2P_GAMESYNC_WAIT 900
 #define P2P_GAMECB_WAIT 200
-#define P2P_VERSION "v0r6 (" __DATE__ ")"
+#define P2P_VERSION N02_VER
 
 void p2p_chat_callback(char * nick, char * msg);
 //bool p2p_add_delay_callback();

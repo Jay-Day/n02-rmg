@@ -14,6 +14,7 @@
 
 extern int PACKETLOSSCOUNT;
 extern int kaillera_spoof_ping;  // 0 = auto (no spoofing), >0 = spoof ping in ms
+extern int kaillera_30fps_mode;  // 0 = normal, 1 = halve delay for 30fps ROMs
 static bool kaillera_spoofing = false;  // Set during connect based on kaillera_spoof_ping
 
 typedef struct {
@@ -349,6 +350,14 @@ void kaillera_ProcessGeneralInstruction(k_instruction * ki) {
 			KAILLERAC.PLAYERSTAT = 1;
 			KAILLERAC.throughput = ki->load_short();
 			KAILLERAC.dframeno = (KAILLERAC.throughput + 1) * KAILLERAC.conset - 1;
+
+			// Halve delay for 30fps ROMs (new emulators call MPV at 30fps instead of 60fps)
+			if (kaillera_30fps_mode && KAILLERAC.dframeno > 1) {
+				int original = KAILLERAC.dframeno;
+				KAILLERAC.dframeno = (KAILLERAC.dframeno + 1) / 2;  // Round up
+				kaillera_core_debug("30fps mode: halved delay from %i to %i frames", original, KAILLERAC.dframeno);
+			}
+
 			kaillera_core_debug("Server says: delay is %i frames (throughput=%i, conset=%i)",
 				KAILLERAC.dframeno, KAILLERAC.throughput, KAILLERAC.conset);
 

@@ -90,6 +90,7 @@ int kaillera_sdlg_frameno = 0;
 int kaillera_sdlg_pps = 0;
 int kaillera_sdlg_delay = -1;
 int kaillera_spoof_ping = 0;  // 0 = auto (no spoofing), >0 = spoof ping in ms
+int kaillera_30fps_mode = 0;  // 0 = normal, 1 = halve delay for 30fps ROMs
 bool MINGUIUPDATE;
 bool hosting = false;
 bool kaillera_sdlg_toggle = false;
@@ -209,7 +210,7 @@ void kaillera_sdlgNormalMode(bool toggle = false){
 //===================================
 
 int kaillera_sdlg_gameslvColumn;
-int kaillera_sdlg_gameslvColumnTypes[7] = {1, 1, 1, 1, 0, 0, 0};
+int kaillera_sdlg_gameslvColumnTypes[7] = {1, 0, 1, 1, 1, 0, 0};  // 1=string, 0=numeric; columns: Game, GameID, Emulator, User, Status, Users
 int kaillera_sdlg_gameslvColumnOrder[7];
 
 int CALLBACK kaillera_sdlg_gameslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
@@ -409,14 +410,17 @@ void kaillera_user_add_callback(char*name, int ping, int status, unsigned short 
 }
 void kaillera_game_add_callback(char*gname, unsigned int id, char*emulator, char*owner, char*users, char status){
 	int x;
-	
+
 	kaillera_sdlg_gameslv.AddRow(gname, id);
 	x = kaillera_sdlg_gameslv.Find(id);
-	
-	kaillera_sdlg_gameslv.FillRow(emulator, 1, x);
-	kaillera_sdlg_gameslv.FillRow(owner, 2, x);
-	kaillera_sdlg_gameslv.FillRow(GAME_STATUS[status], 3, x);
-	kaillera_sdlg_gameslv.FillRow(users, 4, x);
+
+	char idStr[16];
+	wsprintf(idStr, "%u", id);
+	kaillera_sdlg_gameslv.FillRow(idStr, 1, x);
+	kaillera_sdlg_gameslv.FillRow(emulator, 2, x);
+	kaillera_sdlg_gameslv.FillRow(owner, 3, x);
+	kaillera_sdlg_gameslv.FillRow(GAME_STATUS[status], 4, x);
+	kaillera_sdlg_gameslv.FillRow(users, 5, x);
 	kaillera_sdlg_gameslvReSort();
 }
 void kaillera_game_create_callback(char*gname, unsigned int id, char*emulator, char*owner){
@@ -492,10 +496,10 @@ void kaillera_game_status_change_callback(unsigned int id, char status, int play
 		"Playing",
 	};
 	int x = kaillera_sdlg_gameslv.Find(id);
-	kaillera_sdlg_gameslv.FillRow(GAME_STATUS[status], 3, x);
+	kaillera_sdlg_gameslv.FillRow(GAME_STATUS[status], 4, x);
 	char users [32];
 	wsprintf(users, "%i/%i", players, maxplayers);
-	kaillera_sdlg_gameslv.FillRow(users, 4, x);
+	kaillera_sdlg_gameslv.FillRow(users, 5, x);
 	kaillera_sdlg_gameslvReSort();
 }
 
@@ -688,13 +692,13 @@ void kailelra_sdlg_join_selected_game(){
 	if (sel >= 0 && sel < kaillera_sdlg_gameslv.RowsCount() && !inGame) {
 		unsigned int id = (unsigned int)(UINT_PTR)kaillera_sdlg_gameslv.RowNo(sel);
 		char temp[128];
-		kaillera_sdlg_gameslv.CheckRow(temp, 128, 3, sel);
+		kaillera_sdlg_gameslv.CheckRow(temp, 128, 4, sel);  // Status column
 		if (strcmp(temp, "Waiting") != 0) {
 			kaillera_error_callback("Joining running game is not allowed");
 			return;
 		}
 
-		kaillera_sdlg_gameslv.CheckRow(temp, 128, 0, sel);
+		kaillera_sdlg_gameslv.CheckRow(temp, 128, 0, sel);  // Game column
 		if (IsNonGameLobbyName(temp)) {
 			strncpy(GAME, temp, sizeof(GAME) - 1);
 			GAME[sizeof(GAME) - 1] = 0;
@@ -706,7 +710,7 @@ void kailelra_sdlg_join_selected_game(){
 				if (strcmp(cx, temp) == 0) {
 					strncpy(GAME, temp, sizeof(GAME) - 1);
 					GAME[sizeof(GAME) - 1] = 0;
-					kaillera_sdlg_gameslv.CheckRow(temp, 128, 1, sel);
+					kaillera_sdlg_gameslv.CheckRow(temp, 128, 2, sel);  // Emulator column
 					if (strcmp(temp, APP) != 0) {
 					if (MessageBox(kaillera_sdlg, "Emulator/version mismatch and the game may desync.\nDo you want to continue?", "Error", MB_YESNO | MB_ICONEXCLAMATION) != IDYES)
 						return;
@@ -844,7 +848,7 @@ void kaillera_ui_chat_send(char * text){
 		} else if (strcmp(text, "/stats") == 0) {
 			StatsDisplayThreadBegin();
 			return;
-		} 
+		}
 	}
 
 	kaillera_chat_send(text);
@@ -968,11 +972,12 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_userslvColumnOrder[1] = 1;
 
 			kaillera_sdlg_gameslv.handle = GetDlgItem(hDlg, LV_GLIST);
-			kaillera_sdlg_gameslv.AddColumn("Game", 340);
-			kaillera_sdlg_gameslv.AddColumn("Emulator", 190);
-			kaillera_sdlg_gameslv.AddColumn("User", 95);
+			kaillera_sdlg_gameslv.AddColumn("Game", 300);
+			kaillera_sdlg_gameslv.AddColumn("GameID", 45);
+			kaillera_sdlg_gameslv.AddColumn("Emulator", 180);
+			kaillera_sdlg_gameslv.AddColumn("User", 90);
 			kaillera_sdlg_gameslv.AddColumn("Status", 50);
-			kaillera_sdlg_gameslv.AddColumn("Users", 35);
+			kaillera_sdlg_gameslv.AddColumn("Users", 45);
 			kaillera_sdlg_gameslv.FullRowSelect();
 			kaillera_sdlg_gameslvColumn = 3;
 			kaillera_sdlg_gameslvColumnOrder[3] = 0;
@@ -1112,6 +1117,13 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 						GetWindowText(kaillera_sdlg_TXT_GINP, buffrr, 2024);
 						size_t l = strlen(buffrr);
 						if (l>0) {
+							// Handle /halfdelay command locally
+							if (strcmp(buffrr, "/halfdelay") == 0) {
+								kaillera_30fps_mode = !kaillera_30fps_mode;
+								kaillera_core_debug("Half delay mode %s (for 30fps games: Mario Kart, 1080, THPS)", kaillera_30fps_mode ? "ENABLED" : "DISABLED");
+								SetWindowText(kaillera_sdlg_TXT_GINP, "");
+								break;
+							}
 							size_t p = (l < 127) ? l : 127;
 							char sbf[128];
 							memcpy(sbf, buffrr, p);
@@ -1130,6 +1142,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 				SaveJoinMessageSetting();
 				kaillera_leave_game();
 				kaillera_sdlgNormalMode();
+				kaillera_30fps_mode = 0;
 				KSSDFA.input = KSSDFA_END_GAME;
 				KSSDFA.state = 0;
 				break;
@@ -1257,6 +1270,7 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 		// Frame delay field repurposed - use default quit message
 		kaillera_disconnect(quitmsg);
 		kaillera_core_cleanup();
+		kaillera_30fps_mode = 0;
 
 		KSSDFA.state = 0;
 		KSSDFA.input = KSSDFA_END_GAME;
@@ -1614,7 +1628,7 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 
 			kaillera_ssdlg = hDlg;
 
-			SetWindowText(hDlg, "n02 " KAILLERA_VERSION);
+			SetWindowText(hDlg, N02_WINDOW_TITLE);
 			
 			nSettings::Initialize("SC");
 			
