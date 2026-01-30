@@ -11,6 +11,8 @@
 #include "common/nThread.h"
 #include "common/nSettings.h"
 
+static bool IsNonGameLobbyName(const char* name);
+
 bool KAILLERA_CORE_INITIALIZED = false;
 bool inGame = false;
 
@@ -504,7 +506,7 @@ void kaillera_user_game_create_callback(){
 	kaillera_sdlg_LV_GULIST.DeleteAllRows();
 	SetWindowText(kaillera_sdlg_RE_GCHAT, "");
 	EnableWindow(kaillera_sdlg_BTN_KICK, TRUE);
-	EnableWindow(kaillera_sdlg_BTN_START, TRUE);
+	EnableWindow(kaillera_sdlg_BTN_START, !IsNonGameLobbyName(GAME));
 
 	ExecuteOptions();
 }
@@ -614,7 +616,18 @@ void kaillera_end_game_callback(){
 #define MENU_ID_FINDUSER 3
 #define MENU_ID_IGNORE 4
 #define MENU_ID_UNIGNORE 5
+#define MENU_ID_CREATE_AWAY 6
+#define MENU_ID_CREATE_CHAT 7
 #define MENU_ID_CREATE_BASE 1000
+
+static const char* kNonGameLobbyAway = "*Away (leave messages)";
+static const char* kNonGameLobbyChat = "*Chat (not game)";
+
+static bool IsNonGameLobbyName(const char* name) {
+	if (name == NULL || *name == 0)
+		return false;
+	return strcmp(name, kNonGameLobbyAway) == 0 || strcmp(name, kNonGameLobbyChat) == 0;
+}
 
 HMENU kaillera_sdlg_CreateGamesMenu = 0;
 int kaillera_sdlg_GamesCount = 0;
@@ -622,10 +635,12 @@ void kaillera_sdlg_create_games_list_menu() {
 	{
 		kaillera_sdlg_GamesCount = 0;
 		char * xx = gamelist;
-		size_t p;
-		while ((p = strlen(xx)) != 0){
-			xx += p + 1;
-			kaillera_sdlg_GamesCount++;
+		if (xx != NULL) {
+			size_t p;
+			while ((p = strlen(xx)) != 0){
+				xx += p + 1;
+				kaillera_sdlg_GamesCount++;
+			}
 		}
 	}
 
@@ -637,20 +652,34 @@ void kaillera_sdlg_create_games_list_menu() {
 	mi.fMask = MIIM_ID | MIIM_TYPE | MFT_STRING;
 	mi.fType = MFT_STRING;
 	int counter = MENU_ID_CREATE_BASE;
-	while (*cx != 0) {
-		mi.wID = counter;
-		mi.dwTypeData = cx;
-		mi.dwItemData = 0;
-		if (*cx != last_char && kaillera_sdlg_GamesCount > 20){
-			new_char_buffer[0] = *cx;
-			new_char_buffer[1] = 0;
-			ht = CreatePopupMenu();
-			AppendMenu(kaillera_sdlg_CreateGamesMenu, MF_POPUP, (UINT_PTR) ht, new_char_buffer);
-			last_char = *cx;
+	if (cx != NULL) {
+		while (*cx != 0) {
+			mi.wID = counter;
+			mi.dwTypeData = cx;
+			mi.dwItemData = 0;
+			if (*cx != last_char && kaillera_sdlg_GamesCount > 20){
+				new_char_buffer[0] = *cx;
+				new_char_buffer[1] = 0;
+				ht = CreatePopupMenu();
+				AppendMenu(kaillera_sdlg_CreateGamesMenu, MF_POPUP, (UINT_PTR) ht, new_char_buffer);
+				last_char = *cx;
+			}
+			AppendMenu(ht, MF_STRING, counter, cx);
+			cx += strlen(cx) + 1;
+			counter++;
 		}
-		AppendMenu(ht, MF_STRING, counter, cx);
-		cx += strlen(cx) + 1;
-		counter++;
+	}
+
+	if (kaillera_sdlg_GamesCount > 20) {
+		HMENU starMenu = CreatePopupMenu();
+		AppendMenu(kaillera_sdlg_CreateGamesMenu, MF_POPUP, (UINT_PTR)starMenu, "*");
+		AppendMenu(starMenu, MF_STRING, MENU_ID_CREATE_AWAY, kNonGameLobbyAway);
+		AppendMenu(starMenu, MF_STRING, MENU_ID_CREATE_CHAT, kNonGameLobbyChat);
+	} else {
+		if (kaillera_sdlg_GamesCount > 0)
+			AppendMenu(kaillera_sdlg_CreateGamesMenu, MF_SEPARATOR, 0, NULL);
+		AppendMenu(kaillera_sdlg_CreateGamesMenu, MF_STRING, MENU_ID_CREATE_AWAY, kNonGameLobbyAway);
+		AppendMenu(kaillera_sdlg_CreateGamesMenu, MF_STRING, MENU_ID_CREATE_CHAT, kNonGameLobbyChat);
 	}
 }
 
@@ -666,6 +695,12 @@ void kailelra_sdlg_join_selected_game(){
 		}
 
 		kaillera_sdlg_gameslv.CheckRow(temp, 128, 0, sel);
+		if (IsNonGameLobbyName(temp)) {
+			strncpy(GAME, temp, sizeof(GAME) - 1);
+			GAME[sizeof(GAME) - 1] = 0;
+			kaillera_join_game(id);
+			return;
+		}
 		char * cx = gamelist;
 		while (*cx != 0) {
 				if (strcmp(cx, temp) == 0) {
@@ -709,6 +744,13 @@ void kaillera_sdlg_show_games_list_menu(HWND handle, bool incjoin = false){
 	if(result != 0){
 		if(result == MENU_ID_JOIN){
 			kailelra_sdlg_join_selected_game();
+		} else if (result == MENU_ID_CREATE_AWAY || result == MENU_ID_CREATE_CHAT) {
+			if (!inGame) {
+				const char* lobby = (result == MENU_ID_CREATE_AWAY) ? kNonGameLobbyAway : kNonGameLobbyChat;
+				strncpy(GAME, lobby, sizeof(GAME) - 1);
+				GAME[sizeof(GAME) - 1] = 0;
+				kaillera_create_game(GAME);
+			}
 		} else if (result >= MENU_ID_CREATE_BASE) {
 			if (!inGame) {
 					// Get the game name from the submenu item
@@ -1095,7 +1137,11 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 				kaillera_game_drop();
 				break;
 			case BTN_START:
-				kaillera_start_game();
+				if (IsNonGameLobbyName(GAME)) {
+					kaillera_error_callback("This lobby has no game to start.");
+				} else {
+					kaillera_start_game();
+				}
 				break;
 			case BTN_LAGSTAT:
 				{
@@ -1546,8 +1592,12 @@ void ShowCustomIPDialog(HWND hDlg) {
 
 //////////////////////////////////////////
 LRESULT CALLBACK MasterSLDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK MasterWGLDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void ShowMasterSLDialog(HWND hDlg) {
 	DialogBox(hx, (LPCTSTR)KAILLERA_MLIST, hDlg, (DLGPROC)MasterSLDialogProc);
+}
+void ShowMasterWGLDialog(HWND hDlg) {
+	DialogBox(hx, (LPCTSTR)KAILLERA_MLIST, hDlg, (DLGPROC)MasterWGLDialogProc);
 }
 
 //////////////////////////////////////////
@@ -1683,6 +1733,9 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 				break;
 			case BTN_MLIST:
 				ShowMasterSLDialog(hDlg);
+				break;
+			case BTN_WGAMES:
+				ShowMasterWGLDialog(hDlg);
 				break;
 			case RB_MODE_P2P:
 				if (activate_mode(0))

@@ -133,8 +133,9 @@ int DownloadListToBuffer(char * buffer, int size, char * url){
 }
 static nLVw kaillera_mlv;
 int kaillera_mslistColumn;
-int kaillera_mslistColumnTypes[7] = {1, 1, 1, 0, 0, 1, 1};
-int kaillera_mslistColumnOrder[7];
+static const int kMslistMaxColumns = 8;
+int kaillera_mslistColumnTypes[kMslistMaxColumns] = {1, 1, 1, 1, 1, 1, 1, 1};
+int kaillera_mslistColumnOrder[kMslistMaxColumns];
 int CALLBACK kaillera_mslistCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	const int sortColumn = (int)lParamSort;
 	int ind1 = kaillera_mlv.Find(lParam1);
@@ -640,15 +641,23 @@ LRESULT CALLBACK MasterWGLDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
 			SetWindowText(hDlg, "Master servers waiting games list...");
 
 			kaillera_mlv.handle = GetDlgItem(hDlg, LV_SLIST);
-			kaillera_mlv.AddColumn("Name", 140);
-			kaillera_mlv.AddColumn("emulator", 140);
-			kaillera_mlv.AddColumn("user", 60);
-			kaillera_mlv.AddColumn("ping", 50);
-			kaillera_mlv.AddColumn("waiting", 20);
+			kaillera_mlv.initialize();
+			for (int i = 0; i < kMslistMaxColumns; i++) {
+				kaillera_mslistColumnTypes[i] = 1;
+				kaillera_mslistColumnOrder[i] = 0;
+			}
+			kaillera_mlv.AddColumn("Name", 150);
+			kaillera_mlv.AddColumn("Emulator", 120);
+			kaillera_mlv.AddColumn("User", 70);
+			kaillera_mlv.AddColumn("Ping", 45);
+			kaillera_mlv.AddColumn("Waiting", 45);
 			kaillera_mlv.AddColumn("Server", 120);
-			kaillera_mlv.AddColumn("location", 70);
-			kaillera_mlv.AddColumn("IP", 60);
+			kaillera_mlv.AddColumn("Location", 80);
+			kaillera_mlv.AddColumn("IP", 90);
 			kaillera_mlv.FullRowSelect();
+			kaillera_mslistColumn = 3;
+			kaillera_mslistColumnTypes[3] = 0;
+			kaillera_mslistColumnOrder[3] = 1;
 
 			ShowWindow(GetDlgItem(hDlg, BTN_WGAMES), SW_HIDE);
 			ShowWindow(GetDlgItem(hDlg, BTN_ADD), SW_HIDE);
@@ -695,6 +704,11 @@ LRESULT CALLBACK MasterSLDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM 
 			refresher_thread.running = false;
 			SetWindowText(hDlg, "Master servers list...");
 			kaillera_mlv.handle = GetDlgItem(hDlg, LV_SLIST);
+			kaillera_mlv.initialize();
+			for (int i = 0; i < kMslistMaxColumns; i++) {
+				kaillera_mslistColumnTypes[i] = 1;
+				kaillera_mslistColumnOrder[i] = 0;
+			}
 			kaillera_mlv.AddColumn("Name", 180);
 			kaillera_mlv.AddColumn("Location", 140);
 			kaillera_mlv.AddColumn("ping", 60);
@@ -1020,12 +1034,20 @@ LRESULT CALLBACK p2p_MasterSLDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPA
 			SetWindowText(hDlg, "waiting games... ");
 			
 			kaillera_mlv.handle = GetDlgItem(hDlg, LV_SLIST);
+			kaillera_mlv.initialize();
+			for (int i = 0; i < kMslistMaxColumns; i++) {
+				kaillera_mslistColumnTypes[i] = 1;
+				kaillera_mslistColumnOrder[i] = 0;
+			}
 			kaillera_mlv.AddColumn("Game", 290);
 			kaillera_mlv.AddColumn("Emulator", 190);
 			kaillera_mlv.AddColumn("User", 99);
 			kaillera_mlv.AddColumn("Ping", 50);
 			kaillera_mlv.AddColumn("Host", 0);
 			kaillera_mlv.FullRowSelect();
+			kaillera_mslistColumn = 3;
+			kaillera_mslistColumnTypes[3] = 0;
+			kaillera_mslistColumnOrder[3] = 1;
 
 			ShowWindow(GetDlgItem(hDlg, BTN_ADD), SW_HIDE);
 			ShowWindow(GetDlgItem(hDlg, BTN_WGAMES), SW_HIDE);
