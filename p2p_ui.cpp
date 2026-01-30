@@ -294,6 +294,7 @@ bool COREINIT = false;
 int PING_TIME;
 int p2p_option_smoothing;
 int p2p_frame_delay_override;
+int p2p_30fps_mode;
 int p2p_cdlg_peer_joined;
 int p2p_sdlg_frameno = 0;
 int p2p_sdlg_pps = 0;
@@ -392,6 +393,10 @@ void p2p_ui_chat_send(char * xxx){
 			return;
 		} else if (strcmp(xxx, "/stats")==0) {
 		StatsDisplayThreadBegin();
+		return;
+	} else if (strcmp(xxx, "/halfdelay")==0) {
+		p2p_30fps_mode = !p2p_30fps_mode;
+		outpf("Half delay mode %s (for 30fps games: Mario Kart, 1080, THPS)", p2p_30fps_mode ? "ENABLED" : "DISABLED");
 		return;
 	}
 	if (p2p_is_connected()) {
@@ -606,6 +611,7 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 
 				// Frame delay dropdown (host only, per-session)
 				p2p_frame_delay_override = 0;
+				p2p_30fps_mode = 0;
 				HWND hFdlyCombo = GetDlgItem(hDlg, IDC_P2P_FDLY);
 				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"Auto");
 				SendMessage(hFdlyCombo, CB_ADDSTRING, 0, (LPARAM)"1 frame (0-33ms)");
@@ -625,12 +631,13 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 				re_enable_hyperlinks(p2p_ui_con_richedit);
 				p2p_cdlg_timer = SetTimer(hDlg, 0, 1000, 0);
 			}
-		
+
 			break;
 		case WM_CLOSE:
 			if (p2p_disconnect()){
 				// Ensure any override doesn't persist across runs
 				p2p_frame_delay_override = 0;
+				p2p_30fps_mode = 0;
 
 				if (SendMessage(GetDlgItem(hDlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
 					p2p_ssrv_unenlistgame();

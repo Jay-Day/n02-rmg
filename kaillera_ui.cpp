@@ -90,6 +90,7 @@ int kaillera_sdlg_frameno = 0;
 int kaillera_sdlg_pps = 0;
 int kaillera_sdlg_delay = -1;
 int kaillera_spoof_ping = 0;  // 0 = auto (no spoofing), >0 = spoof ping in ms
+int kaillera_30fps_mode = 0;  // 0 = normal, 1 = halve delay for 30fps ROMs
 bool MINGUIUPDATE;
 bool hosting = false;
 bool kaillera_sdlg_toggle = false;
@@ -844,7 +845,7 @@ void kaillera_ui_chat_send(char * text){
 		} else if (strcmp(text, "/stats") == 0) {
 			StatsDisplayThreadBegin();
 			return;
-		} 
+		}
 	}
 
 	kaillera_chat_send(text);
@@ -1112,6 +1113,13 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 						GetWindowText(kaillera_sdlg_TXT_GINP, buffrr, 2024);
 						size_t l = strlen(buffrr);
 						if (l>0) {
+							// Handle /halfdelay command locally
+							if (strcmp(buffrr, "/halfdelay") == 0) {
+								kaillera_30fps_mode = !kaillera_30fps_mode;
+								kaillera_core_debug("Half delay mode %s (for 30fps games: Mario Kart, 1080, THPS)", kaillera_30fps_mode ? "ENABLED" : "DISABLED");
+								SetWindowText(kaillera_sdlg_TXT_GINP, "");
+								break;
+							}
 							size_t p = (l < 127) ? l : 127;
 							char sbf[128];
 							memcpy(sbf, buffrr, p);
@@ -1130,6 +1138,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 				SaveJoinMessageSetting();
 				kaillera_leave_game();
 				kaillera_sdlgNormalMode();
+				kaillera_30fps_mode = 0;
 				KSSDFA.input = KSSDFA_END_GAME;
 				KSSDFA.state = 0;
 				break;
@@ -1257,6 +1266,7 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 		// Frame delay field repurposed - use default quit message
 		kaillera_disconnect(quitmsg);
 		kaillera_core_cleanup();
+		kaillera_30fps_mode = 0;
 
 		KSSDFA.state = 0;
 		KSSDFA.input = KSSDFA_END_GAME;

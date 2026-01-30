@@ -5,6 +5,7 @@
 #include "../errr.h"
 
 extern int p2p_frame_delay_override;
+extern int p2p_30fps_mode;
 
 typedef struct {
 	int crframeno;
@@ -513,6 +514,13 @@ bool p2p_SynChronizeClocksOrDie(){
 			p2p_core_debug("Calculated delay: %i frames, using override: %i frames", calculated_delay, P2PCORE.throughput);
 		} else {
 			P2PCORE.throughput = calculated_delay;
+		}
+
+		// Halve delay for 30fps ROMs (new emulators call MPV at 30fps instead of 60fps)
+		if (p2p_30fps_mode && P2PCORE.throughput > 1) {
+			int original = P2PCORE.throughput;
+			P2PCORE.throughput = (P2PCORE.throughput + 1) / 2;  // Round up
+			p2p_core_debug("30fps mode: halved delay from %i to %i frames", original, P2PCORE.throughput);
 		}
 
 		p2p_instruction kxxx(TTIME, 0);
