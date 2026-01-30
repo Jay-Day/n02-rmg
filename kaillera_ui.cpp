@@ -1592,8 +1592,12 @@ void ShowCustomIPDialog(HWND hDlg) {
 
 //////////////////////////////////////////
 LRESULT CALLBACK MasterSLDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK MasterWGLDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void ShowMasterSLDialog(HWND hDlg) {
 	DialogBox(hx, (LPCTSTR)KAILLERA_MLIST, hDlg, (DLGPROC)MasterSLDialogProc);
+}
+void ShowMasterWGLDialog(HWND hDlg) {
+	DialogBox(hx, (LPCTSTR)KAILLERA_MLIST, hDlg, (DLGPROC)MasterWGLDialogProc);
 }
 
 //////////////////////////////////////////
@@ -1729,6 +1733,9 @@ LRESULT CALLBACK KailleraServerSelectDialogProc(HWND hDlg, UINT uMsg, WPARAM wPa
 				break;
 			case BTN_MLIST:
 				ShowMasterSLDialog(hDlg);
+				break;
+			case BTN_WGAMES:
+				ShowMasterWGLDialog(hDlg);
 				break;
 			case RB_MODE_P2P:
 				if (activate_mode(0))
