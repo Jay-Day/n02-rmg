@@ -1,8 +1,12 @@
 #pragma once
 
+// Preprocessor stringification macros
+#define N02_STRINGIFY(x) #x
+#define N02_TOSTRING(x) N02_STRINGIFY(x)
+
 // Use GIT_REVISION from CI build if available, otherwise use default
 #ifdef GIT_REVISION
-#define N02_VER GIT_REVISION
+#define N02_VER N02_TOSTRING(GIT_REVISION)
 #else
 #define N02_VER "dev"
 #endif
