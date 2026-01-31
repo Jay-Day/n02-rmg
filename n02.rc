@@ -122,11 +122,11 @@ BEGIN
     PUSHBUTTON      "ping",IDC_PING,34,265,25,11
     PUSHBUTTON      "&Drop Game",IDC_DROPGAME,61,265,54,11
     CONTROL         "",IDC_RICHEDIT2,"RICHEDIT",TCS_HOTTRACK | TCS_RAGGEDRIGHT | TCS_MULTISELECT | WS_VSCROLL,7,17,350,186
-    LTEXT           "--------------------------",SA_PST,7,230,232,34
+    LTEXT           "--------------------------",SA_PST,7,230,200,34
     PUSHBUTTON      "whatismyip",IDC_SSERV_WHATSMYIP,228,249,45,11
     CONTROL         "Enli&st in waiting games list",CHK_ENLIST,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,230,238,99,10
     GROUPBOX        "Host:",IDC_HOSTT,222,218,135,58
-    LTEXT           "Frame Delay:",IDC_P2P_FDLY_LBL,230,226,45,8
+    LTEXT           "Frame Delay:",IDC_P2P_FDLY_LBL,230,226,48,8
     COMBOBOX        IDC_P2P_FDLY,278,224,75,150,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Game: -------------------------------------------------------------------------------",IDC_GAME,7,7,350,9,0,WS_EX_STATICEDGE
     PUSHBUTTON      "Eject peer",IDC_EJECT,228,262,45,11,NOT WS_VISIBLE
