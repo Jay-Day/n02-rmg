@@ -17,3 +17,6 @@ extern int SOCK_SEND_RETR;
 void StatsDisplayThreadBegin();
 
 void StatsDisplayThreadEnd();
+
+void StatsAppendLine(const char* fmt, ...);
+void StatsClearExtra();
