@@ -168,7 +168,10 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 		//GetCurrentDirectory(5000, FileName);
 		//int ll = strlen(FileName);
 		time_t t = time(0);
-		wsprintf(FileName,".\\records\\%08X_%s.krec", t, GN);//wsprintf(FileName,".\\records\\%s[%i].krec", GN, time(NULL));
+		struct tm* tm_info = localtime(&t);
+		char dateTime[20];
+		strftime(dateTime, sizeof(dateTime), "%Y%m%d_%H%M", tm_info);
+		wsprintf(FileName,".\\records\\%s_%s.krec", dateTime, GN);
 		
 		//StatusOutput.out("started recording new file...");
 		//StatusOutput.out(FileName);
