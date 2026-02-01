@@ -23,6 +23,8 @@ static const char* kNoSpaceEditOldProcProp = "n02_NoSpaceEditOldProc";
 static const COLORREF P2P_COLOR_GREEN = 0x00009900; // matches kaillera_ui_motd()
 static void p2p_debug_color(COLORREF color, char* arg_0, ...);
 
+static int g_p2p_last_ping_ms = -1;
+
 void InitializeP2PSubsystem(HWND hDlg, bool host, bool hostByCode);
 void InitializeP2PSubsystemWithJoinCode(HWND hDlg, const char* join_code, const char* join_fallback_ip_port);
 static void InitializeP2PSubsystemInternal(HWND hDlg, bool host, bool hostByCode, const char* join_code, const char* join_fallback_ip_port);
@@ -709,6 +711,7 @@ void p2p_ping_callback(int PING){
 	char buf[200];
 	wsprintf(buf, "ping: %i ms pl: %i", PING, PACKETLOSSCOUNT);
 	SetWindowText(GetDlgItem(p2p_ui_connection_dlg, SA_PST), buf);
+	g_p2p_last_ping_ms = PING;
 }
 
 
@@ -1270,6 +1273,16 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 			break;
 	case WM_TIMER:
 		{
+			// Disabled for now (Feb 2026): periodic "health" logging to Stats.
+			// Kept here so we can re-enable quickly if we need more desync telemetry.
+#if 0
+			static DWORD s_p2p_health_last_ms = 0;
+			static int s_p2p_health_last_loss = 0;
+			static int s_p2p_health_last_send_retr = 0;
+			static int s_p2p_health_last_recv_retr = 0;
+			static int s_p2p_health_last_misorder = 0;
+#endif
+
 			p2p_cdlg_timer_step++;
 
 				// NAT traversal housekeeping (host keepalive / join retries)
@@ -1383,6 +1396,39 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 					p2p_sdlg_frameno = jf;
 					p2p_sdlg_pps = SOCK_SEND_PACKETS;
 				}
+#if 0
+				// Lightweight periodic network health line (Stats window only).
+				// Helps correlate desync reports with jitter/loss without spamming chat.
+				if (p2p_is_connected()) {
+					if (s_p2p_health_last_ms == 0) {
+						s_p2p_health_last_ms = now;
+						s_p2p_health_last_loss = PACKETLOSSCOUNT;
+						s_p2p_health_last_send_retr = SOCK_SEND_RETR;
+						s_p2p_health_last_recv_retr = SOCK_RECV_RETR;
+						s_p2p_health_last_misorder = PACKETMISOTDERCOUNT;
+					} else if (now - s_p2p_health_last_ms >= 5000) {
+						const int d_loss = PACKETLOSSCOUNT - s_p2p_health_last_loss;
+						const int d_send_retr = SOCK_SEND_RETR - s_p2p_health_last_send_retr;
+						const int d_recv_retr = SOCK_RECV_RETR - s_p2p_health_last_recv_retr;
+						const int d_mis = PACKETMISOTDERCOUNT - s_p2p_health_last_misorder;
+
+						StatsAppendLine("health f=%i ping=%ims loss=%i(+%i) retr=%i/%i(+%i/+%i) mis=%i(+%i)",
+							p2p_get_frames_count(),
+							g_p2p_last_ping_ms,
+							PACKETLOSSCOUNT, d_loss,
+							SOCK_SEND_RETR, SOCK_RECV_RETR, d_send_retr, d_recv_retr,
+							PACKETMISOTDERCOUNT, d_mis);
+
+						s_p2p_health_last_ms = now;
+						s_p2p_health_last_loss = PACKETLOSSCOUNT;
+						s_p2p_health_last_send_retr = SOCK_SEND_RETR;
+						s_p2p_health_last_recv_retr = SOCK_RECV_RETR;
+						s_p2p_health_last_misorder = PACKETMISOTDERCOUNT;
+					}
+				} else {
+					s_p2p_health_last_ms = 0;
+				}
+#endif
 			}
 			break;
 		}
