@@ -213,6 +213,16 @@ int kaillera_sdlg_gameslvColumn;
 int kaillera_sdlg_gameslvColumnTypes[7] = {1, 0, 1, 1, 1, 0, 0};  // 1=string, 0=numeric; columns: Game, GameID, Emulator, User, Status, Users
 int kaillera_sdlg_gameslvColumnOrder[7];
 
+static int kaillera_game_status_rank(const char *status){
+	if (status == NULL)
+		return INT_MAX;
+	if (strcmp(status, "Waiting") == 0)
+		return 0;
+	if (strcmp(status, "Playing") == 0)
+		return 1;
+	return 2;
+}
+
 int CALLBACK kaillera_sdlg_gameslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	const int sortColumn = (int)lParamSort;
 
@@ -228,8 +238,27 @@ int CALLBACK kaillera_sdlg_gameslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LP
 	kaillera_sdlg_gameslv.CheckRow(ItemText1, 128, sortColumn, ind1);
 	kaillera_sdlg_gameslv.CheckRow(ItemText2, 128, sortColumn, ind2);
 
+	const bool ascending = kaillera_sdlg_gameslvColumnOrder[sortColumn] != 0;
+	if (sortColumn == 4) {
+		int rank1 = kaillera_game_status_rank(ItemText1);
+		int rank2 = kaillera_game_status_rank(ItemText2);
+
+		if (rank1 != rank2)
+			return ascending ? (rank1 > rank2 ? 1 : -1) : (rank1 > rank2 ? -1 : 1);
+
+		// Tie-break by game name to keep status grouping stable.
+		char name1[128];
+		char name2[128];
+		kaillera_sdlg_gameslv.CheckRow(name1, 128, 0, ind1);
+		kaillera_sdlg_gameslv.CheckRow(name2, 128, 0, ind2);
+		int nameCmp = strcmp(name1, name2);
+		if (nameCmp != 0)
+			return ascending ? nameCmp : -nameCmp;
+		return 0;
+	}
+
 	if (kaillera_sdlg_gameslvColumnTypes[sortColumn]) {
-		if (kaillera_sdlg_gameslvColumnOrder[sortColumn])
+		if (ascending)
 			return strcmp(ItemText1, ItemText2);
 		else
 			return -1*strcmp(ItemText1, ItemText2);
@@ -237,7 +266,7 @@ int CALLBACK kaillera_sdlg_gameslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LP
 		ind1 = atoi(ItemText1);
 		ind2 = atoi(ItemText2);
 
-		if (kaillera_sdlg_gameslvColumnOrder[sortColumn])
+		if (ascending)
 			return (ind1==ind2? 0 : (ind1>ind2? 1 : -1));
 		else
 			return (ind1==ind2? 0 : (ind1>ind2? -1 : 1));
@@ -979,8 +1008,8 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_gameslv.AddColumn("Status", 50);
 			kaillera_sdlg_gameslv.AddColumn("Users", 45);
 			kaillera_sdlg_gameslv.FullRowSelect();
-			kaillera_sdlg_gameslvColumn = 3;
-			kaillera_sdlg_gameslvColumnOrder[3] = 0;
+			kaillera_sdlg_gameslvColumn = 4;
+			kaillera_sdlg_gameslvColumnOrder[4] = 5;
 
 			kaillera_sdlg_partchat = GetDlgItem(hDlg, RE_PART);
 			re_enable_hyperlinks(kaillera_sdlg_partchat);
