@@ -42,7 +42,6 @@ typedef struct {
 	unsigned int game_id;
 	bool user_id_requested;
 	bool leave_game_requested;
-	bool has_dropped;  // Track if player dropped (for restart handling)
 	unsigned short user_id;
 		int tmoutrsttime;
 		bool pending_spoof_announce;
@@ -112,7 +111,6 @@ bool kaillera_core_cleanup(){
 	KAILLERAC.game_id_requested = false;
 	KAILLERAC.user_id_requested = false;
 	KAILLERAC.leave_game_requested = false;
-	KAILLERAC.has_dropped = false;
 	KAILLERAC.pending_spoof_announce = false;
 
 	return true;
@@ -157,7 +155,6 @@ bool kaillera_core_initialize(int port, char * appname, char * username, char co
 	KAILLERAC.game_id_requested = false;
 	KAILLERAC.user_id_requested = false;
 	KAILLERAC.leave_game_requested = false;
-	KAILLERAC.has_dropped = false;
 	KAILLERAC.pending_spoof_announce = false;
 	KAILLERAC.owner = false;
 
@@ -346,6 +343,10 @@ void kaillera_ProcessGeneralInstruction(k_instruction * ki) {
 		}
 	case GAMEBEGN:
 		{
+			if (KAILLERAC.leave_game_requested) {
+				kaillera_core_debug("Ignoring GAMEBEGN (leave requested)");
+				break;
+			}
 			//KAILLERAC.USERSTAT = 3;
 			KAILLERAC.PLAYERSTAT = 1;
 			KAILLERAC.throughput = ki->load_short();
@@ -579,7 +580,6 @@ void kaillera_join_game(unsigned int id){
 	KAILLERAC.game_id_requested = false;
 	KAILLERAC.game_id = id;
 	KAILLERAC.leave_game_requested = false;
-	KAILLERAC.has_dropped = false;
 
 	KAILLERAC.owner = false;
 
@@ -599,7 +599,6 @@ void kaillera_create_game(char * name) {
 	strncpy(KAILLERAC.GAME, (name != NULL) ? name : "", sizeof(KAILLERAC.GAME) - 1);
 	KAILLERAC.GAME[sizeof(KAILLERAC.GAME) - 1] = 0;
 	KAILLERAC.game_id_requested = true;
-	KAILLERAC.has_dropped = false;
 	k_instruction cg;
 	cg.type = GAMEMAKE;
 	cg.store_string(name);
@@ -638,14 +637,6 @@ void kaillera_start_game() {
 		kx.store_int(-1);
 		KAILLERAC.connection->send_instruction(&kx);
 	}
-
-	// If restarting after a drop, also trigger local start via state machine
-	// The server might ignore GAMEBEGN for us, but it should notify other players
-	if (KAILLERAC.has_dropped) {
-		KAILLERAC.has_dropped = false;
-		KAILLERAC.PLAYERSTAT = 1;
-		KSSDFA.input = KSSDFA_START_GAME;
-	}
 }
 void kaillera_game_drop(){
 	KAILLERAC.leave_game_requested = false;
@@ -659,7 +650,6 @@ void kaillera_game_drop(){
 	// Notify RMG that the local player dropped (must be before PLAYERSTAT=0)
 	kaillera_player_dropped_callback(KAILLERAC.USERNAME, KAILLERAC.playerno);
 	KAILLERAC.PLAYERSTAT = 0;
-	KAILLERAC.has_dropped = true;  // Mark that we dropped (for restart handling)
 	kaillera_end_game_callback();
 }
 
@@ -671,6 +661,10 @@ void kaillera_end_game(){
 		kx.store_char(0);  // First byte (matches Supraclient)
 		kx.store_char(0);  // Second byte (matches Supraclient)
 		KAILLERAC.connection->send_instruction(&kx);
+	}
+	if (KAILLERAC.USERSTAT > 1) {
+		kaillera_player_dropped_callback(KAILLERAC.USERNAME, KAILLERAC.playerno);
+		KAILLERAC.PLAYERSTAT = 0;
 	}
 	kaillera_end_game_callback();
 }
