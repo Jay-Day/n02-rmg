@@ -99,8 +99,50 @@ static int g_flash_on_user_join = 0;
 static int g_beep_on_user_join = 1;
 static bool g_join_message_host_context = false;
 
+enum {
+	MENU_ID_USERS_COL_BASE = 20000,
+	MENU_ID_LOBBY_COL_BASE = 20100,
+	MENU_ID_GAMES_COL_BASE = 20200
+};
+
+struct KailleraColumnMenuItem {
+	UINT id;
+	const char* title;
+	int defaultWidth;
+};
+
+static KailleraColumnMenuItem g_users_column_menu[] = {
+	{ MENU_ID_USERS_COL_BASE + 0, "Name", 80 },
+	{ MENU_ID_USERS_COL_BASE + 1, "Ping", 35 },
+	{ MENU_ID_USERS_COL_BASE + 2, "UID", 44 },
+	{ MENU_ID_USERS_COL_BASE + 3, "Status", 85 },
+	{ MENU_ID_USERS_COL_BASE + 4, "Connection", 55 },
+};
+
+static KailleraColumnMenuItem g_lobby_column_menu[] = {
+	{ MENU_ID_LOBBY_COL_BASE + 0, "Nick", 100 },
+	{ MENU_ID_LOBBY_COL_BASE + 1, "Ping", 60 },
+	{ MENU_ID_LOBBY_COL_BASE + 2, "Connection", 60 },
+	{ MENU_ID_LOBBY_COL_BASE + 3, "Delay", 120 },
+};
+
+static KailleraColumnMenuItem g_games_column_menu[] = {
+	{ MENU_ID_GAMES_COL_BASE + 0, "Game", 285 },
+	{ MENU_ID_GAMES_COL_BASE + 1, "GameID", 60 },
+	{ MENU_ID_GAMES_COL_BASE + 2, "Emulator", 130 },
+	{ MENU_ID_GAMES_COL_BASE + 3, "User", 150 },
+	{ MENU_ID_GAMES_COL_BASE + 4, "Status", 50 },
+	{ MENU_ID_GAMES_COL_BASE + 5, "Users", 45 },
+};
+
+static int g_users_column_restore_widths[5] = { 80, 35, 44, 85, 55 };
+static int g_lobby_column_restore_widths[4] = { 100, 60, 60, 120 };
+static int g_games_column_restore_widths[6] = { 285, 60, 130, 150, 50, 45 };
+static const int KAILLERA_MIN_COLUMN_WIDTH = 16;
+
 static void ExecuteOptions();
 static void ApplyKailleraDialogResizeLayout(HWND hDlg, int clientWidth, int clientHeight);
+static void SyncColumnRestoreWidths(HWND listHandle, int* restoreWidths, KailleraColumnMenuItem* columns, int count);
 
 enum {
 	KAILLERA_ANCHOR_LEFT = 1 << 0,
@@ -386,9 +428,10 @@ static void LoadListViewColumnWidths(HWND listHandle, const char* keyPrefix, int
 	for (int i = 0; i < count; ++i) {
 		char key[64];
 		wsprintf(key, "%s%i", keyPrefix, i);
-		const int defaultWidth = ListView_GetColumnWidth(listHandle, i);
-		const int savedWidth = nSettings::get_int(key, defaultWidth);
-		if (savedWidth > 20)
+		int savedWidth = nSettings::get_int(key, -1);
+		if (savedWidth > 0 && savedWidth < KAILLERA_MIN_COLUMN_WIDTH)
+			savedWidth = KAILLERA_MIN_COLUMN_WIDTH;
+		if (savedWidth >= 0)
 			ListView_SetColumnWidth(listHandle, i, savedWidth);
 	}
 }
@@ -414,9 +457,9 @@ static void SaveKailleraDialogLayout(HWND hDlg) {
 	nSettings::set_int((char*)"KSDLG_TOPRW", g_kaillera_top_right_width);
 	nSettings::set_int((char*)"KSDLG_BOTRW", g_kaillera_bottom_right_width);
 
-	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_ULIST), "KSDLG_UCOL_", 4);
+	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_ULIST), "KSDLG_UCOL_", 5);
 	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_GLIST), "KSDLG_GCOL_", 6);
-	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_GULIST), "KSDLG_PCOL_", 3);
+	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_GULIST), "KSDLG_PCOL_", 4);
 }
 
 static void LoadKailleraDialogLayout(HWND hDlg) {
@@ -437,9 +480,12 @@ static void LoadKailleraDialogLayout(HWND hDlg) {
 	g_kaillera_top_right_width = nSettings::get_int((char*)"KSDLG_TOPRW", g_kaillera_top_right_width);
 	g_kaillera_bottom_right_width = nSettings::get_int((char*)"KSDLG_BOTRW", g_kaillera_bottom_right_width);
 
-	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_ULIST), "KSDLG_UCOL_", 4);
+	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_ULIST), "KSDLG_UCOL_", 5);
 	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_GLIST), "KSDLG_GCOL_", 6);
-	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_GULIST), "KSDLG_PCOL_", 3);
+	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_GULIST), "KSDLG_PCOL_", 4);
+	SyncColumnRestoreWidths(GetDlgItem(hDlg, LV_ULIST), g_users_column_restore_widths, g_users_column_menu, 5);
+	SyncColumnRestoreWidths(GetDlgItem(hDlg, LV_GLIST), g_games_column_restore_widths, g_games_column_menu, 6);
+	SyncColumnRestoreWidths(GetDlgItem(hDlg, LV_GULIST), g_lobby_column_restore_widths, g_lobby_column_menu, 4);
 
 	RECT clientRect;
 	if (GetClientRect(hDlg, &clientRect)) {
@@ -734,8 +780,8 @@ void kaillera_sdlg_gameslvSort(int column) {
 
 
 int kaillera_sdlg_userslvColumn;
-int kaillera_sdlg_userslvColumnTypes[4] = {1, 0, 0, 1};  // Name, Ping, UID, Status
-int kaillera_sdlg_userslvColumnOrder[4];
+int kaillera_sdlg_userslvColumnTypes[5] = {1, 0, 0, 1, 1};  // Name, Ping, UID, Status, Connection
+int kaillera_sdlg_userslvColumnOrder[5];
 
 int CALLBACK kaillera_sdlg_userslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	const int sortColumn = (int)lParamSort;
@@ -867,7 +913,6 @@ void __cdecl kaillera_outpf(char * arg_0, ...) {
 
 
 void kaillera_user_add_callback(char*name, int ping, int status, unsigned short id, char conn){
-	(void)conn;
 	char bfx[500];
 	int x;
 	kaillera_sdlg_userslv.AddRow(name, id);
@@ -877,6 +922,7 @@ void kaillera_user_add_callback(char*name, int ping, int status, unsigned short 
 	wsprintf(bfx, "%u", id);
 	kaillera_sdlg_userslv.FillRow(bfx, 2, x);  // UID
 	kaillera_sdlg_userslv.FillRow(USER_STATUS[status], 3, x);  // Status
+	kaillera_sdlg_userslv.FillRow(CONNECTION_TYPES[conn], 4, x);  // Connection
 
 }
 void kaillera_game_add_callback(char*gname, unsigned int id, char*emulator, char*owner, char*users, char status){
@@ -1009,10 +1055,11 @@ void kaillera_player_add_callback(char *name, int ping, unsigned short id, char 
 	kaillera_sdlg_LV_GULIST.AddRow(name, id);
 	int x = kaillera_sdlg_LV_GULIST.Find(id);
 	wsprintf(bfx, "%i", ping);
-	kaillera_sdlg_LV_GULIST.FillRow(bfx, 1, x);	
+	kaillera_sdlg_LV_GULIST.FillRow(bfx, 1, x);
+	kaillera_sdlg_LV_GULIST.FillRow(CONNECTION_TYPES[conn], 2, x);
 	int thrp = (ping * 60 / 1000 / conn) + 2;
 	wsprintf(bfx, "%i frames", thrp * conn - 1);
-	kaillera_sdlg_LV_GULIST.FillRow(bfx, 2, x);
+	kaillera_sdlg_LV_GULIST.FillRow(bfx, 3, x);
 }
 void kaillera_player_joined_callback(char * username, int ping, unsigned short uid, char connset){
 	kaillera_ui_gdebug_color(KAILLERA_COLOR_DARK_BLUE, "* Joins: %s", username);
@@ -1245,6 +1292,78 @@ void kaillera_sdlg_destroy_games_list_menu(){
 
 }
 
+static void SyncColumnRestoreWidths(HWND listHandle, int* restoreWidths, KailleraColumnMenuItem* columns, int count) {
+	if (listHandle == NULL || restoreWidths == NULL || columns == NULL || count <= 0)
+		return;
+
+	for (int i = 0; i < count; ++i) {
+		const int width = ListView_GetColumnWidth(listHandle, i);
+		if (width > 0) {
+			restoreWidths[i] = (width < KAILLERA_MIN_COLUMN_WIDTH) ? KAILLERA_MIN_COLUMN_WIDTH : width;
+		} else if (restoreWidths[i] <= 0) {
+			restoreWidths[i] = columns[i].defaultWidth;
+		}
+	}
+}
+
+static void ShowColumnVisibilityMenu(
+	HWND hDlg,
+	HWND listHandle,
+	KailleraColumnMenuItem* columns,
+	int* restoreWidths,
+	int count) {
+	if (hDlg == NULL || listHandle == NULL || columns == NULL || restoreWidths == NULL || count <= 0)
+		return;
+
+	SyncColumnRestoreWidths(listHandle, restoreWidths, columns, count);
+
+	HMENU menu = CreatePopupMenu();
+	for (int i = 0; i < count; ++i) {
+		const int width = ListView_GetColumnWidth(listHandle, i);
+		UINT flags = MF_STRING;
+		if (width > 0)
+			flags |= MF_CHECKED;
+		AppendMenuA(menu, flags, columns[i].id, columns[i].title);
+	}
+
+	POINT pi;
+	GetCursorPos(&pi);
+	const int result = TrackPopupMenu(menu, TPM_RETURNCMD, pi.x, pi.y, 0, hDlg, NULL);
+	if (result != 0) {
+		for (int i = 0; i < count; ++i) {
+			if ((int)columns[i].id != result)
+				continue;
+
+			const int width = ListView_GetColumnWidth(listHandle, i);
+			if (width > 0) {
+				int visibleCount = 0;
+				for (int j = 0; j < count; ++j) {
+					if (ListView_GetColumnWidth(listHandle, j) > 0)
+						visibleCount++;
+				}
+				if (visibleCount <= 1)
+					break;
+
+				restoreWidths[i] = width;
+				ListView_SetColumnWidth(listHandle, i, 0);
+			} else {
+				int restoreWidth = restoreWidths[i];
+				if (restoreWidth <= 0)
+					restoreWidth = columns[i].defaultWidth;
+				if (restoreWidth > 0 && restoreWidth < KAILLERA_MIN_COLUMN_WIDTH)
+					restoreWidth = KAILLERA_MIN_COLUMN_WIDTH;
+				ListView_SetColumnWidth(listHandle, i, restoreWidth);
+			}
+			break;
+		}
+
+		SyncColumnRestoreWidths(listHandle, restoreWidths, columns, count);
+		InvalidateRect(listHandle, NULL, TRUE);
+	}
+
+	DestroyMenu(menu);
+}
+
 void kaillera_sdlg_show_users_list_menu(HWND hDlg) {
 	int sel = kaillera_sdlg_userslv.SelectedRow();
 	if (sel < 0 || sel >= kaillera_sdlg_userslv.RowsCount()) {
@@ -1470,15 +1589,16 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_userslv.AddColumn("Ping", 35);
 			kaillera_sdlg_userslv.AddColumn("UID", 44);
 			kaillera_sdlg_userslv.AddColumn("Status", 85);
+			kaillera_sdlg_userslv.AddColumn("Connection", 0);
 			kaillera_sdlg_userslv.FullRowSelect();
 			kaillera_sdlg_userslvColumn = 1;
 			kaillera_sdlg_userslvColumnOrder[1] = 1;
 
 			kaillera_sdlg_gameslv.handle = GetDlgItem(hDlg, LV_GLIST);
-			kaillera_sdlg_gameslv.AddColumn("Game", 300);
-			kaillera_sdlg_gameslv.AddColumn("GameID", 45);
-			kaillera_sdlg_gameslv.AddColumn("Emulator", 180);
-			kaillera_sdlg_gameslv.AddColumn("User", 90);
+			kaillera_sdlg_gameslv.AddColumn("Game", 285);
+			kaillera_sdlg_gameslv.AddColumn("GameID", 60);
+			kaillera_sdlg_gameslv.AddColumn("Emulator", 130);
+			kaillera_sdlg_gameslv.AddColumn("User", 150);
 			kaillera_sdlg_gameslv.AddColumn("Status", 50);
 			kaillera_sdlg_gameslv.AddColumn("Users", 45);
 			kaillera_sdlg_gameslv.FullRowSelect();
@@ -1514,6 +1634,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 
 			kaillera_sdlg_LV_GULIST.AddColumn("Nick", 100);
 			kaillera_sdlg_LV_GULIST.AddColumn("Ping", 60);
+			kaillera_sdlg_LV_GULIST.AddColumn("Connection", 0);
 			kaillera_sdlg_LV_GULIST.AddColumn("Delay", 120);
 			kaillera_sdlg_LV_GULIST.FullRowSelect();
 
@@ -1795,6 +1916,32 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			case WM_NOTIFY:
 			if (re_handle_link_click(lParam))
 				break;
+			{
+				LPNMHDR hdr = (LPNMHDR)lParam;
+				HWND gamesHeader = (kaillera_sdlg_gameslv.handle != NULL) ? ListView_GetHeader(kaillera_sdlg_gameslv.handle) : NULL;
+				HWND usersHeader = (kaillera_sdlg_userslv.handle != NULL) ? ListView_GetHeader(kaillera_sdlg_userslv.handle) : NULL;
+				HWND lobbyHeader = (kaillera_sdlg_LV_GULIST.handle != NULL) ? ListView_GetHeader(kaillera_sdlg_LV_GULIST.handle) : NULL;
+				if ((hdr->code == HDN_ITEMCHANGINGA || hdr->code == HDN_ITEMCHANGINGW) &&
+					(hdr->hwndFrom == gamesHeader || hdr->hwndFrom == usersHeader || hdr->hwndFrom == lobbyHeader)) {
+					NMHEADERA* nmh = (NMHEADERA*)lParam;
+					if (nmh->pitem != NULL && (nmh->pitem->mask & HDI_WIDTH) != 0 &&
+						nmh->pitem->cxy > 0 && nmh->pitem->cxy < KAILLERA_MIN_COLUMN_WIDTH) {
+						nmh->pitem->cxy = KAILLERA_MIN_COLUMN_WIDTH;
+					}
+				}
+				if (hdr->code == NM_RCLICK && hdr->hwndFrom == gamesHeader) {
+					ShowColumnVisibilityMenu(hDlg, kaillera_sdlg_gameslv.handle, g_games_column_menu, g_games_column_restore_widths, 6);
+					break;
+				}
+				if (hdr->code == NM_RCLICK && hdr->hwndFrom == usersHeader) {
+					ShowColumnVisibilityMenu(hDlg, kaillera_sdlg_userslv.handle, g_users_column_menu, g_users_column_restore_widths, 5);
+					break;
+				}
+				if (hdr->code == NM_RCLICK && hdr->hwndFrom == lobbyHeader) {
+					ShowColumnVisibilityMenu(hDlg, kaillera_sdlg_LV_GULIST.handle, g_lobby_column_menu, g_lobby_column_restore_widths, 4);
+					break;
+				}
+			}
 			if(((LPNMHDR)lParam)->code==NM_DBLCLK && ((LPNMHDR)lParam)->hwndFrom==kaillera_sdlg_gameslv.handle){
 				kailelra_sdlg_join_selected_game();
 			}
