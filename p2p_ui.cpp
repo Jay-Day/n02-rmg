@@ -23,6 +23,8 @@ static const char* kNoSpaceEditOldProcProp = "n02_NoSpaceEditOldProc";
 static const COLORREF P2P_COLOR_GREEN = 0x00009900; // matches kaillera_ui_motd()
 static void p2p_debug_color(COLORREF color, char* arg_0, ...);
 
+static int g_p2p_last_ping_ms = -1;
+
 void InitializeP2PSubsystem(HWND hDlg, bool host, bool hostByCode);
 void InitializeP2PSubsystemWithJoinCode(HWND hDlg, const char* join_code, const char* join_fallback_ip_port);
 static void InitializeP2PSubsystemInternal(HWND hDlg, bool host, bool hostByCode, const char* join_code, const char* join_fallback_ip_port);
@@ -218,6 +220,9 @@ static int g_p2p_trav_reg_attempts = 0;
 static bool g_p2p_trav_host_fallback_active = false;
 static bool g_p2p_trav_host_ip_pending = false;
 static char g_p2p_trav_host_ip_port[64] = { 0 };
+// When true, we intentionally stop REG/KEEP (and hide the code UI) while a peer
+// is connected. We'll resume and mint a fresh code after the peer disconnects.
+static bool g_p2p_trav_host_reg_suspended = false;
 
 static DWORD g_p2p_trav_next_reg_ms = 0;
 static DWORD g_p2p_trav_next_keep_ms = 0;
@@ -330,6 +335,7 @@ static void p2p_trav_reset_state() {
 	g_p2p_trav_host_fallback_active = false;
 	g_p2p_trav_host_ip_pending = false;
 	g_p2p_trav_host_ip_port[0] = 0;
+	g_p2p_trav_host_reg_suspended = false;
 	g_p2p_trav_next_reg_ms = 0;
 	g_p2p_trav_next_keep_ms = 0;
 	g_p2p_trav_next_join_ms = 0;
@@ -581,7 +587,7 @@ static void BuildEnlistAppName(char* out, size_t out_len) {
 	strcat(out, kP2PAppCodeSuffix);
 }
 static void p2p_update_host_code_ui(HWND hDlg) {
-	const bool showCode = HOST;
+	const bool showCode = HOST && !g_p2p_trav_host_reg_suspended;
 	ShowWindow(GetDlgItem(hDlg, IDC_P2P_CODE_LBL), showCode ? SW_SHOW : SW_HIDE);
 	ShowWindow(GetDlgItem(hDlg, IDC_P2P_CODE), showCode ? SW_SHOW : SW_HIDE);
 	ShowWindow(GetDlgItem(hDlg, IDC_P2P_CODE_COPY), showCode ? SW_SHOW : SW_HIDE);
@@ -705,6 +711,7 @@ void p2p_ping_callback(int PING){
 	char buf[200];
 	wsprintf(buf, "ping: %i ms pl: %i", PING, PACKETLOSSCOUNT);
 	SetWindowText(GetDlgItem(p2p_ui_connection_dlg, SA_PST), buf);
+	g_p2p_last_ping_ms = PING;
 }
 
 
@@ -1055,6 +1062,24 @@ void p2p_enlist_game() {
 
 void p2p_peer_joined_callback(){
 	MessageBeep(MB_OK);
+	// If hosting-by-code, release the code once the peer successfully connects.
+	// We don't need the traversal server during an active session, and keeping
+	// registration alive increases moving parts.
+	if (HOST && g_p2p_trav_host_enabled && !g_p2p_trav_host_reg_suspended) {
+		// Best-effort: tell the server to release immediately.
+		p2p_trav_send_close();
+
+		// Stop REG/KEEP until the peer disconnects; also hide the code UI.
+		g_p2p_trav_host_reg_suspended = true;
+		g_p2p_trav_code[0] = 0;
+		g_p2p_trav_token[0] = 0;
+		g_p2p_trav_reg_attempts = 0;
+		g_p2p_trav_next_reg_ms = 0;
+		g_p2p_trav_next_keep_ms = 0;
+		if (p2p_ui_connection_dlg != NULL) {
+			p2p_update_host_code_ui(p2p_ui_connection_dlg);
+		}
+	}
 	if (HOST && SendMessage(GetDlgItem(p2p_ui_connection_dlg,CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED)
 		p2p_ssrv_unenlistgame();
 	p2p_cdlg_peer_joined = 1;
@@ -1063,6 +1088,18 @@ void p2p_peer_joined_callback(){
 void p2p_peer_left_callback(){
 	MessageBeep(MB_OK);
 	p2p_core_debug("Peer left");
+	// If we suspended registration while connected, resume and mint a fresh code.
+	if (HOST && g_p2p_trav_host_enabled) {
+		g_p2p_trav_host_reg_suspended = false;
+		g_p2p_trav_code[0] = 0;
+		g_p2p_trav_token[0] = 0;
+		g_p2p_trav_reg_attempts = 0;
+		g_p2p_trav_next_reg_ms = 0;
+		g_p2p_trav_next_keep_ms = 0;
+		if (p2p_ui_connection_dlg != NULL) {
+			p2p_update_host_code_ui(p2p_ui_connection_dlg);
+		}
+	}
 	g_p2p_trav_host_peer_ip[0] = 0;
 	g_p2p_trav_host_peer_port = 0;
 	g_p2p_trav_host_peer_deadline_ms = 0;
@@ -1236,50 +1273,66 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 			break;
 	case WM_TIMER:
 		{
+			// Disabled for now (Feb 2026): periodic "health" logging to Stats.
+			// Kept here so we can re-enable quickly if we need more desync telemetry.
+#if 0
+			static DWORD s_p2p_health_last_ms = 0;
+			static int s_p2p_health_last_loss = 0;
+			static int s_p2p_health_last_send_retr = 0;
+			static int s_p2p_health_last_recv_retr = 0;
+			static int s_p2p_health_last_misorder = 0;
+#endif
+
 			p2p_cdlg_timer_step++;
 
-			// NAT traversal housekeeping (host keepalive / join retries)
-			const DWORD now = GetTickCount();
-			if (HOST && g_p2p_trav_host_enabled) {
-				if (g_p2p_trav_token[0] == 0) {
-					if (g_p2p_trav_next_reg_ms == 0 || now >= g_p2p_trav_next_reg_ms) {
-							if (g_p2p_trav_reg_attempts >= 4) {
-								g_p2p_trav_host_enabled = false;
-								g_p2p_trav_host_fallback_active = true;
-								g_p2p_trav_next_reg_ms = 0;
-								g_p2p_trav_next_keep_ms = 0;
-								g_p2p_trav_host_ip_pending = true;
-								g_p2p_trav_host_ip_port[0] = 0;
-								if (p2p_ui_connection_dlg != NULL) {
-									p2p_update_host_code_ui(p2p_ui_connection_dlg);
+				// NAT traversal housekeeping (host keepalive / join retries)
+				const DWORD now = GetTickCount();
+				if (HOST && g_p2p_trav_host_enabled) {
+					// While a peer is connected, we release the code and stop talking to the traversal server.
+					if (!g_p2p_trav_host_reg_suspended) {
+						if (g_p2p_trav_token[0] == 0) {
+							// No token yet; keep retrying registration until we get REGOK.
+							if (g_p2p_trav_next_reg_ms == 0 || now >= g_p2p_trav_next_reg_ms) {
+								if (g_p2p_trav_reg_attempts >= 4) {
+									g_p2p_trav_host_enabled = false;
+									g_p2p_trav_host_fallback_active = true;
+									g_p2p_trav_next_reg_ms = 0;
+									g_p2p_trav_next_keep_ms = 0;
+									g_p2p_trav_host_ip_pending = true;
+									g_p2p_trav_host_ip_port[0] = 0;
+									if (p2p_ui_connection_dlg != NULL) {
+										p2p_update_host_code_ui(p2p_ui_connection_dlg);
+									}
+									outpf("Unable to contact NAT server, hosting by IP. You may need to manually port forward.");
+									p2p_ssrv_whatismyip();
+									if (SendMessage(GetDlgItem(hDlg, CHK_ENLIST), BM_GETCHECK, 0, 0) == BST_CHECKED) {
+										p2p_enlist_game();
+									}
+								} else {
+									p2p_trav_send_reg();
+									g_p2p_trav_next_reg_ms = now + 2000;
 								}
-								outpf("Unable to contact NAT server, hosting by IP. You may need to manually port forward.");
-								p2p_ssrv_whatismyip();
-								if (SendMessage(GetDlgItem(hDlg, CHK_ENLIST), BM_GETCHECK, 0, 0)==BST_CHECKED) {
-									p2p_enlist_game();
-								}
-							} else {
-							p2p_trav_send_reg();
-							g_p2p_trav_next_reg_ms = now + 2000;
+							}
+						} else {
+							// Keep the session alive (and update observed endpoint if NAT mapping changes).
+							if (g_p2p_trav_next_keep_ms == 0 || now >= g_p2p_trav_next_keep_ms) {
+								p2p_trav_send_keep();
+								g_p2p_trav_next_keep_ms = now + 10000;
+							}
 						}
 					}
-				} else {
-					if (g_p2p_trav_next_keep_ms == 0 || now >= g_p2p_trav_next_keep_ms) {
-						p2p_trav_send_keep();
-						g_p2p_trav_next_keep_ms = now + 10000;
+
+					// While waiting for the peer's initial LOGN_REQ, keep punching their endpoint for a short window.
+					if (!p2p_is_connected() &&
+						g_p2p_trav_host_peer_ip[0] != 0 &&
+						g_p2p_trav_host_peer_port > 0 &&
+						g_p2p_trav_host_peer_deadline_ms != 0 &&
+						now < g_p2p_trav_host_peer_deadline_ms) {
+						if (g_p2p_trav_next_host_punch_ms == 0 || now >= g_p2p_trav_next_host_punch_ms) {
+							p2p_trav_punch_endpoint(g_p2p_trav_host_peer_ip, g_p2p_trav_host_peer_port, g_p2p_trav_token);
+							g_p2p_trav_next_host_punch_ms = now + 1000;
+						}
 					}
-				}
-				// While waiting for the peer's initial LOGN_REQ, keep punching their endpoint for a short window.
-				if (!p2p_is_connected() &&
-					g_p2p_trav_host_peer_ip[0] != 0 &&
-					g_p2p_trav_host_peer_port > 0 &&
-					g_p2p_trav_host_peer_deadline_ms != 0 &&
-					now < g_p2p_trav_host_peer_deadline_ms) {
-					if (g_p2p_trav_next_host_punch_ms == 0 || now >= g_p2p_trav_next_host_punch_ms) {
-						p2p_trav_punch_endpoint(g_p2p_trav_host_peer_ip, g_p2p_trav_host_peer_port, g_p2p_trav_token);
-						g_p2p_trav_next_host_punch_ms = now + 1000;
-					}
-				}
 				} else if (!HOST && g_p2p_trav_join_enabled && !p2p_is_connected()) {
 					if (g_p2p_trav_join_deadline_ms != 0 && now >= g_p2p_trav_join_deadline_ms) {
 						if (g_p2p_trav_join_busy) {
@@ -1343,6 +1396,39 @@ LRESULT CALLBACK ConnectionDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARA
 					p2p_sdlg_frameno = jf;
 					p2p_sdlg_pps = SOCK_SEND_PACKETS;
 				}
+#if 0
+				// Lightweight periodic network health line (Stats window only).
+				// Helps correlate desync reports with jitter/loss without spamming chat.
+				if (p2p_is_connected()) {
+					if (s_p2p_health_last_ms == 0) {
+						s_p2p_health_last_ms = now;
+						s_p2p_health_last_loss = PACKETLOSSCOUNT;
+						s_p2p_health_last_send_retr = SOCK_SEND_RETR;
+						s_p2p_health_last_recv_retr = SOCK_RECV_RETR;
+						s_p2p_health_last_misorder = PACKETMISOTDERCOUNT;
+					} else if (now - s_p2p_health_last_ms >= 5000) {
+						const int d_loss = PACKETLOSSCOUNT - s_p2p_health_last_loss;
+						const int d_send_retr = SOCK_SEND_RETR - s_p2p_health_last_send_retr;
+						const int d_recv_retr = SOCK_RECV_RETR - s_p2p_health_last_recv_retr;
+						const int d_mis = PACKETMISOTDERCOUNT - s_p2p_health_last_misorder;
+
+						StatsAppendLine("health f=%i ping=%ims loss=%i(+%i) retr=%i/%i(+%i/+%i) mis=%i(+%i)",
+							p2p_get_frames_count(),
+							g_p2p_last_ping_ms,
+							PACKETLOSSCOUNT, d_loss,
+							SOCK_SEND_RETR, SOCK_RECV_RETR, d_send_retr, d_recv_retr,
+							PACKETMISOTDERCOUNT, d_mis);
+
+						s_p2p_health_last_ms = now;
+						s_p2p_health_last_loss = PACKETLOSSCOUNT;
+						s_p2p_health_last_send_retr = SOCK_SEND_RETR;
+						s_p2p_health_last_recv_retr = SOCK_RECV_RETR;
+						s_p2p_health_last_misorder = PACKETMISOTDERCOUNT;
+					}
+				} else {
+					s_p2p_health_last_ms = 0;
+				}
+#endif
 			}
 			break;
 		}
