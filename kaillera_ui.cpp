@@ -97,8 +97,10 @@ bool kaillera_sdlg_toggle = false;
 
 static int g_flash_on_user_join = 0;
 static int g_beep_on_user_join = 1;
+static bool g_join_message_host_context = false;
 
 static void ExecuteOptions();
+static void ApplyKailleraDialogResizeLayout(HWND hDlg, int clientWidth, int clientHeight);
 
 enum {
 	KAILLERA_ANCHOR_LEFT = 1 << 0,
@@ -366,6 +368,87 @@ static void ApplyJoinMessageLayout(HWND hDlg, int deltaY) {
 		SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW);
 }
 
+static void SaveListViewColumnWidths(HWND listHandle, const char* keyPrefix, int count) {
+	if (listHandle == NULL || keyPrefix == NULL || count <= 0)
+		return;
+
+	for (int i = 0; i < count; ++i) {
+		char key[64];
+		wsprintf(key, "%s%i", keyPrefix, i);
+		nSettings::set_int(key, ListView_GetColumnWidth(listHandle, i));
+	}
+}
+
+static void LoadListViewColumnWidths(HWND listHandle, const char* keyPrefix, int count) {
+	if (listHandle == NULL || keyPrefix == NULL || count <= 0)
+		return;
+
+	for (int i = 0; i < count; ++i) {
+		char key[64];
+		wsprintf(key, "%s%i", keyPrefix, i);
+		const int defaultWidth = ListView_GetColumnWidth(listHandle, i);
+		const int savedWidth = nSettings::get_int(key, defaultWidth);
+		if (savedWidth > 20)
+			ListView_SetColumnWidth(listHandle, i, savedWidth);
+	}
+}
+
+static void SaveKailleraDialogLayout(HWND hDlg) {
+	if (hDlg == NULL || !g_kaillera_resize_initialized)
+		return;
+
+	WINDOWPLACEMENT wp;
+	memset(&wp, 0, sizeof(wp));
+	wp.length = sizeof(wp);
+	if (GetWindowPlacement(hDlg, &wp)) {
+		const int w = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
+		const int h = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
+		if (w > 100 && h > 100) {
+			nSettings::set_int((char*)"KSDLG_X", wp.rcNormalPosition.left);
+			nSettings::set_int((char*)"KSDLG_Y", wp.rcNormalPosition.top);
+			nSettings::set_int((char*)"KSDLG_W", w);
+			nSettings::set_int((char*)"KSDLG_H", h);
+		}
+	}
+
+	nSettings::set_int((char*)"KSDLG_TOPRW", g_kaillera_top_right_width);
+	nSettings::set_int((char*)"KSDLG_BOTRW", g_kaillera_bottom_right_width);
+
+	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_ULIST), "KSDLG_UCOL_", 4);
+	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_GLIST), "KSDLG_GCOL_", 6);
+	SaveListViewColumnWidths(GetDlgItem(hDlg, LV_GULIST), "KSDLG_PCOL_", 3);
+}
+
+static void LoadKailleraDialogLayout(HWND hDlg) {
+	if (hDlg == NULL || !g_kaillera_resize_initialized)
+		return;
+
+	const int savedW = nSettings::get_int((char*)"KSDLG_W", 0);
+	const int savedH = nSettings::get_int((char*)"KSDLG_H", 0);
+	if (savedW > 100 && savedH > 100) {
+		RECT windowRect = { 0, 0, 0, 0 };
+		GetWindowRect(hDlg, &windowRect);
+		const int savedX = nSettings::get_int((char*)"KSDLG_X", windowRect.left);
+		const int savedY = nSettings::get_int((char*)"KSDLG_Y", windowRect.top);
+		SetWindowPos(hDlg, NULL, savedX, savedY, savedW, savedH,
+			SWP_NOZORDER | SWP_NOACTIVATE);
+	}
+
+	g_kaillera_top_right_width = nSettings::get_int((char*)"KSDLG_TOPRW", g_kaillera_top_right_width);
+	g_kaillera_bottom_right_width = nSettings::get_int((char*)"KSDLG_BOTRW", g_kaillera_bottom_right_width);
+
+	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_ULIST), "KSDLG_UCOL_", 4);
+	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_GLIST), "KSDLG_GCOL_", 6);
+	LoadListViewColumnWidths(GetDlgItem(hDlg, LV_GULIST), "KSDLG_PCOL_", 3);
+
+	RECT clientRect;
+	if (GetClientRect(hDlg, &clientRect)) {
+		ApplyKailleraDialogResizeLayout(hDlg,
+			clientRect.right - clientRect.left,
+			clientRect.bottom - clientRect.top);
+	}
+}
+
 static bool GetChildRectInClient(HWND hDlg, int controlId, RECT* outRect) {
 	HWND hCtrl = GetDlgItem(hDlg, controlId);
 	if (hCtrl == NULL || outRect == NULL)
@@ -490,12 +573,18 @@ static void LoadJoinNotifySettings(){
 	g_beep_on_user_join = (beep == -1) ? 1 : (beep != 0);
 }
 
-static void LoadJoinMessageSetting(){
+static void LoadJoinMessageSettingForContext(bool hostContext){
+	g_join_message_host_context = hostContext;
+
 	if (kaillera_sdlg_TXT_MSG == NULL)
 		return;
 
 	char msg[128];
-	nSettings::get_str((char*)"JOINMSG", msg, (char*)"");
+	if (hostContext) {
+		nSettings::get_str((char*)"JOINMSG_HOST", msg, (char*)"");
+	} else {
+		nSettings::get_str((char*)"JOINMSG_JOIN", msg, (char*)"");
+	}
 	SetWindowText(kaillera_sdlg_TXT_MSG, msg);
 }
 
@@ -505,7 +594,14 @@ static void SaveJoinMessageSetting(){
 
 	char msg[128];
 	GetWindowText(kaillera_sdlg_TXT_MSG, msg, (int)sizeof(msg));
-	nSettings::set_str((char*)"JOINMSG", msg);
+	nSettings::set_str(g_join_message_host_context ? (char*)"JOINMSG_HOST" : (char*)"JOINMSG_JOIN", msg);
+}
+
+static void SwitchJoinMessageContext(bool hostContext){
+	if (g_join_message_host_context == hostContext)
+		return;
+	SaveJoinMessageSetting();
+	LoadJoinMessageSettingForContext(hostContext);
 }
 
 static void FlashKailleraDialogIfNotFocused(){
@@ -638,8 +734,8 @@ void kaillera_sdlg_gameslvSort(int column) {
 
 
 int kaillera_sdlg_userslvColumn;
-int kaillera_sdlg_userslvColumnTypes[7] = {1, 0, 1, 1, 0, 1, 1};
-int kaillera_sdlg_userslvColumnOrder[7];
+int kaillera_sdlg_userslvColumnTypes[4] = {1, 0, 0, 1};  // Name, Ping, UID, Status
+int kaillera_sdlg_userslvColumnOrder[4];
 
 int CALLBACK kaillera_sdlg_userslvCompareFunc(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	const int sortColumn = (int)lParamSort;
@@ -771,6 +867,7 @@ void __cdecl kaillera_outpf(char * arg_0, ...) {
 
 
 void kaillera_user_add_callback(char*name, int ping, int status, unsigned short id, char conn){
+	(void)conn;
 	char bfx[500];
 	int x;
 	kaillera_sdlg_userslv.AddRow(name, id);
@@ -780,7 +877,6 @@ void kaillera_user_add_callback(char*name, int ping, int status, unsigned short 
 	wsprintf(bfx, "%u", id);
 	kaillera_sdlg_userslv.FillRow(bfx, 2, x);  // UID
 	kaillera_sdlg_userslv.FillRow(USER_STATUS[status], 3, x);  // Status
-	kaillera_sdlg_userslv.FillRow(CONNECTION_TYPES[conn], 4, x);  // Connection
 
 }
 void kaillera_game_add_callback(char*gname, unsigned int id, char*emulator, char*owner, char*users, char status){
@@ -880,6 +976,7 @@ void kaillera_game_status_change_callback(unsigned int id, char status, int play
 
 void kaillera_user_game_create_callback(){
 	inGame = true;
+	SwitchJoinMessageContext(true);
 	hosting = true;
 	kaillera_sdlgGameMode();
 	kaillera_sdlg_LV_GULIST.DeleteAllRows();
@@ -891,12 +988,14 @@ void kaillera_user_game_create_callback(){
 }
 void kaillera_user_game_closed_callback(){
 	inGame = false;
+	SwitchJoinMessageContext(false);
 	hosting = false;
 	kaillera_sdlgNormalMode();
 }
 
 void kaillera_user_game_joined_callback(){
 	inGame = true;
+	SwitchJoinMessageContext(false);
 	hosting = false;
 	kaillera_sdlgGameMode();
 	kaillera_sdlg_LV_GULIST.DeleteAllRows();
@@ -911,10 +1010,9 @@ void kaillera_player_add_callback(char *name, int ping, unsigned short id, char 
 	int x = kaillera_sdlg_LV_GULIST.Find(id);
 	wsprintf(bfx, "%i", ping);
 	kaillera_sdlg_LV_GULIST.FillRow(bfx, 1, x);	
-	kaillera_sdlg_LV_GULIST.FillRow(CONNECTION_TYPES[conn], 2, x);
 	int thrp = (ping * 60 / 1000 / conn) + 2;
 	wsprintf(bfx, "%i frames", thrp * conn - 1);
-	kaillera_sdlg_LV_GULIST.FillRow(bfx, 3, x);
+	kaillera_sdlg_LV_GULIST.FillRow(bfx, 2, x);
 }
 void kaillera_player_joined_callback(char * username, int ping, unsigned short uid, char connset){
 	kaillera_ui_gdebug_color(KAILLERA_COLOR_DARK_BLUE, "* Joins: %s", username);
@@ -937,6 +1035,7 @@ void kaillera_player_left_callback(char * user, unsigned short id){
 }
 void kaillera_user_kicked_callback(){
 	inGame = false;
+	SwitchJoinMessageContext(false);
 	hosting = false;
 	kaillera_error_callback("* You have been kicked out of the game");
 	KSSDFA.input = KSSDFA_END_GAME;
@@ -1369,9 +1468,8 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_userslv.handle = GetDlgItem(hDlg, LV_ULIST);
 			kaillera_sdlg_userslv.AddColumn("Name", 80);
 			kaillera_sdlg_userslv.AddColumn("Ping", 35);
-			kaillera_sdlg_userslv.AddColumn("UID", 30);
-			kaillera_sdlg_userslv.AddColumn("Status", 40);
-			kaillera_sdlg_userslv.AddColumn("Connection", 55);
+			kaillera_sdlg_userslv.AddColumn("UID", 44);
+			kaillera_sdlg_userslv.AddColumn("Status", 85);
 			kaillera_sdlg_userslv.FullRowSelect();
 			kaillera_sdlg_userslvColumn = 1;
 			kaillera_sdlg_userslvColumnOrder[1] = 1;
@@ -1409,15 +1507,14 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 			kaillera_sdlg_MINGUIUPDATE = GetDlgItem(hDlg, CHK_MINGUIUPD);
 			kaillera_sdlg_TXT_MSG = GetDlgItem(hDlg, TXT_MSG);
 			kaillera_sdlg_JOINMSG_LBL = GetDlgItem(hDlg, IDC_JOINMSG_LBL);
-			LoadJoinMessageSetting();
+			LoadJoinMessageSettingForContext(false);
 
 			re_enable_hyperlinks(kaillera_sdlg_RE_GCHAT);
 
 
 			kaillera_sdlg_LV_GULIST.AddColumn("Nick", 100);
 			kaillera_sdlg_LV_GULIST.AddColumn("Ping", 60);
-			kaillera_sdlg_LV_GULIST.AddColumn("Connection", 60);
-			kaillera_sdlg_LV_GULIST.AddColumn("Delay", 60);
+			kaillera_sdlg_LV_GULIST.AddColumn("Delay", 120);
 			kaillera_sdlg_LV_GULIST.FullRowSelect();
 
 			kaillera_sdlgNormalMode();
@@ -1428,6 +1525,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 
 			MINGUIUPDATE = false;
 			InitializeKailleraDialogResizeLayout(hDlg);
+			LoadKailleraDialogLayout(hDlg);
 
 			return 0;
 			
@@ -1553,6 +1651,7 @@ LRESULT CALLBACK KailleraServerDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, L
 		break;
 	case WM_CLOSE:
 		SaveJoinMessageSetting();
+		SaveKailleraDialogLayout(hDlg);
 
 		KillTimer(hDlg, kaillera_sdlg_sipd_timer);
 		
