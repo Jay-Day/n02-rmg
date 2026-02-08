@@ -602,7 +602,7 @@ void kaillera_login_stat_callback(char*lsmsg){
 }
 void kaillera_player_dropped_callback(char * user, int gdpl){
 	kaillera_gdebug("* Dropped: %s (Player %i)", user, gdpl);
-	if (kaillera_is_game_running() && infos.clientDroppedCallback)
+	if (infos.clientDroppedCallback)
 		infos.clientDroppedCallback(user,gdpl);
 	if (gdpl == playerno) {
 		KSSDFA.input = KSSDFA_END_GAME;
