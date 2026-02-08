@@ -105,6 +105,12 @@ void p2p_AdjustTime(int TIME){
 
 int p2p_PING_TIME;
 
+static void p2p_mark_lobby_ping_alive() {
+	const int now = p2p_GetTime();
+	P2PCORE.last_ping_sent_time = now;
+	P2PCORE.last_ping_echo_time = now;
+}
+
 bool p2p_is_connected(){
 	return P2PCORE.status != 0 && P2PCORE.ping != -1 && P2PCORE.connection;
 }
@@ -277,6 +283,9 @@ void p2p_drop_game(){
 		P2PCORE.status = 1;
 		P2PCORE.USERREADY = false;
 		P2PCORE.PEERREADY = false;
+		// Entering lobby from gameplay: reset ping timeout baseline to "now"
+		// so old pre-game timestamps cannot trigger immediate false timeouts.
+		p2p_mark_lobby_ping_alive();
 		p2p_retransmit();
 
 		p2p_client_dropped_callback(P2PCORE.PEERNAME, P2PCORE.HOST? 2: 1);
@@ -765,15 +774,15 @@ void p2p_step(){
 				}
 			}
 		}
-		// If the peer disappears without sending EXIT (UDP), the host can get stuck thinking it's still connected.
-		// Use the periodic lobby pings (sent by the UI) to detect this and reset host state so new clients can connect.
+		// If the peer disappears without sending EXIT (UDP), either side can get
+		// stuck thinking it's still connected. Use periodic lobby pings (sent by
+		// the UI) to detect this and recover.
 		{
 			const int P2P_LOBBY_PING_TIMEOUT_MS = 10000;
 			const int P2P_LOBBY_PING_ACTIVITY_MS = 5000;
 			const int now = p2p_GetTime();
 
-			if (P2PCORE.HOST &&
-				P2PCORE.CONNECTED &&
+			if (P2PCORE.CONNECTED &&
 				P2PCORE.status == 1 &&
 				P2PCORE.last_ping_sent_time != 0 &&
 				P2PCORE.last_ping_echo_time != 0 &&
@@ -791,15 +800,20 @@ void p2p_step(){
 				P2PCORE.last_ping_sent_time = 0;
 				P2PCORE.last_ping_echo_time = 0;
 
-				p2p_core_debug("reinitializing server...");
-				delete P2PCORE.connection;
-				P2PCORE.connection = new p2p_message;
-				if (!P2PCORE.connection->initialize(P2PCORE.PORT)){
-					p2p_core_debug("Error initializing socket at specified port");
+				if (P2PCORE.HOST) {
+					P2PCORE.status = 1;
+					p2p_core_debug("reinitializing server...");
+					delete P2PCORE.connection;
+					P2PCORE.connection = new p2p_message;
+					if (!P2PCORE.connection->initialize(P2PCORE.PORT)){
+						p2p_core_debug("Error initializing socket at specified port");
+					} else {
+						p2p_core_debug("Done");
+					}
 				} else {
-					p2p_core_debug("Done");
+					// Match existing EXIT behavior for non-host peers.
+					P2PCORE.status = 0;
 				}
-				P2PCORE.ping = -1;
 			}
 		}
 		if (P2PCORE.connection && P2PCORE.connection->has_ssrv()){
@@ -832,6 +846,9 @@ inline bool ProcessGameStuff(){
 				P2PCORE.status = 1;
 				P2PCORE.USERREADY = false;
 				P2PCORE.PEERREADY = false;
+				// Entering lobby from gameplay: reset ping timeout baseline to "now"
+				// so old pre-game timestamps cannot trigger immediate false timeouts.
+				p2p_mark_lobby_ping_alive();
 				p2p_client_dropped_callback(P2PCORE.PEERNAME, P2PCORE.HOST? 2: 1);
 				p2p_client_dropped_callback(P2PCORE.USERNAME, P2PCORE.HOST? 1: 2);
 				p2p_end_game_callback();
