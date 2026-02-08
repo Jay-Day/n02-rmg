@@ -2398,34 +2398,16 @@ void KLSListDblClick(HWND hDlg){
 void KLSListLoad(){
 	KLSList.clear();
 
-	// Always add default servers first
-	KLSNST sx;
-	strcpy(sx.servname, "Chicago SSB"); strcpy(sx.hostname, "92.38.176.115:27888"); KLSList.add(sx);
-	strcpy(sx.servname, "SSBL Georgia Netplay"); strcpy(sx.hostname, "45.61.60.96:27888"); KLSList.add(sx);
-	strcpy(sx.servname, "Miami Secret"); strcpy(sx.hostname, "185.144.159.190:27888"); KLSList.add(sx);
-	strcpy(sx.servname, "Seattle"); strcpy(sx.hostname, "23.227.163.253:27888"); KLSList.add(sx);
-	strcpy(sx.servname, "San Fran"); strcpy(sx.hostname, "165.227.60.3:27888"); KLSList.add(sx);
-
-	// Add any saved servers that aren't duplicates of defaults
+	// Load servers from n02.ini
 	int count = nSettings::get_int("SLC", 0);
 	for (int x=1;x<=count;x++){
 		char idt[32];
-		KLSNST saved;
+		KLSNST sx;
 		wsprintf(idt, "SLS%i", x);
-		nSettings::get_str(idt,saved.servname, "UserName");
+		nSettings::get_str(idt,sx.servname, "UserName");
 		wsprintf(idt, "SLH%i", x);
-		nSettings::get_str(idt,saved.hostname, "127.0.0.1");
-
-		// Check if this hostname already exists in the list
-		bool duplicate = false;
-		for (int i=0; i<KLSList.length; i++){
-			if (strcmp(KLSList[i].hostname, saved.hostname) == 0){
-				duplicate = true;
-				break;
-			}
-		}
-		if (!duplicate)
-			KLSList.add(saved);
+		nSettings::get_str(idt,sx.hostname, "127.0.0.1");
+		KLSList.add(sx);
 	}
 	KLSListDisplay();
 	KLSListRefreshStatus();
