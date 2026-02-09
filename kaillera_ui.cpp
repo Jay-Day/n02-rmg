@@ -2398,16 +2398,29 @@ void KLSListDblClick(HWND hDlg){
 void KLSListLoad(){
 	KLSList.clear();
 
-	// Load servers from n02.ini
-	int count = nSettings::get_int("SLC", 0);
-	for (int x=1;x<=count;x++){
-		char idt[32];
+	int initialized = nSettings::get_int("SLInit", 0);
+	if (initialized) {
+		// Load servers from n02.ini
+		int count = nSettings::get_int("SLC", 0);
+		for (int x=1;x<=count;x++){
+			char idt[32];
+			KLSNST sx;
+			wsprintf(idt, "SLS%i", x);
+			nSettings::get_str(idt,sx.servname, "UserName");
+			wsprintf(idt, "SLH%i", x);
+			nSettings::get_str(idt,sx.hostname, "127.0.0.1");
+			KLSList.add(sx);
+		}
+	} else {
+		// Seed default servers on first run
 		KLSNST sx;
-		wsprintf(idt, "SLS%i", x);
-		nSettings::get_str(idt,sx.servname, "UserName");
-		wsprintf(idt, "SLH%i", x);
-		nSettings::get_str(idt,sx.hostname, "127.0.0.1");
-		KLSList.add(sx);
+		strcpy(sx.servname, "Chicago SSB"); strcpy(sx.hostname, "92.38.176.115:27888"); KLSList.add(sx);
+		strcpy(sx.servname, "SSBL Georgia Netplay"); strcpy(sx.hostname, "45.61.60.96:27888"); KLSList.add(sx);
+		strcpy(sx.servname, "Miami Secret"); strcpy(sx.hostname, "185.144.159.190:27888"); KLSList.add(sx);
+		strcpy(sx.servname, "Seattle"); strcpy(sx.hostname, "23.227.163.253:27888"); KLSList.add(sx);
+		strcpy(sx.servname, "San Fran"); strcpy(sx.hostname, "165.227.60.3:27888"); KLSList.add(sx);
+		nSettings::set_int("SLInit", 1);
+		KLSListSave();
 	}
 	KLSListDisplay();
 	KLSListRefreshStatus();
