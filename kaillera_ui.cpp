@@ -2412,15 +2412,29 @@ void KLSListLoad(){
 			KLSList.add(sx);
 		}
 	} else {
-		// Seed default servers on first run
-		KLSNST sx;
-		strcpy(sx.servname, "Chicago SSB"); strcpy(sx.hostname, "92.38.176.115:27888"); KLSList.add(sx);
-		strcpy(sx.servname, "SSBL Georgia Netplay"); strcpy(sx.hostname, "45.61.60.96:27888"); KLSList.add(sx);
-		strcpy(sx.servname, "Miami Secret"); strcpy(sx.hostname, "185.144.159.190:27888"); KLSList.add(sx);
-		strcpy(sx.servname, "Seattle"); strcpy(sx.hostname, "23.227.163.253:27888"); KLSList.add(sx);
-		strcpy(sx.servname, "San Fran"); strcpy(sx.hostname, "165.227.60.3:27888"); KLSList.add(sx);
+		int existingCount = nSettings::get_int("SLC", 0);
+		if (existingCount > 0) {
+			// Existing user upgrading — preserve their server list
+			for (int x=1;x<=existingCount;x++){
+				char idt[32];
+				KLSNST sx;
+				wsprintf(idt, "SLS%i", x);
+				nSettings::get_str(idt,sx.servname, "UserName");
+				wsprintf(idt, "SLH%i", x);
+				nSettings::get_str(idt,sx.hostname, "127.0.0.1");
+				KLSList.add(sx);
+			}
+		} else {
+			// Truly first run — seed default servers
+			KLSNST sx;
+			strcpy(sx.servname, "Chicago SSB"); strcpy(sx.hostname, "92.38.176.115:27888"); KLSList.add(sx);
+			strcpy(sx.servname, "SSBL Georgia Netplay"); strcpy(sx.hostname, "45.61.60.96:27888"); KLSList.add(sx);
+			strcpy(sx.servname, "Miami Secret"); strcpy(sx.hostname, "185.144.159.190:27888"); KLSList.add(sx);
+			strcpy(sx.servname, "Seattle"); strcpy(sx.hostname, "23.227.163.253:27888"); KLSList.add(sx);
+			strcpy(sx.servname, "San Fran"); strcpy(sx.hostname, "165.227.60.3:27888"); KLSList.add(sx);
+			KLSListSave();
+		}
 		nSettings::set_int("SLInit", 1);
-		KLSListSave();
 	}
 	KLSListDisplay();
 	KLSListRefreshStatus();
