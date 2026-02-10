@@ -7,6 +7,7 @@
 
 extern int p2p_frame_delay_override;
 extern int p2p_30fps_mode;
+extern char recording_player_names[4][32];
 
 typedef struct {
 	int crframeno;
@@ -735,11 +736,17 @@ void p2p_step(){
 					kx.inst.flags = LOAD_LOAD;
 					P2PCORE.connection->send_instruction(&kx);
 					Sleep(P2P_GAMECB_WAIT);
+					memset(recording_player_names, 0, sizeof(recording_player_names));
+					strncpy(recording_player_names[0], P2PCORE.HOST ? P2PCORE.USERNAME : P2PCORE.PEERNAME, 31);
+					strncpy(recording_player_names[1], P2PCORE.HOST ? P2PCORE.PEERNAME : P2PCORE.USERNAME, 31);
 					p2p_game_callback(P2PCORE.GAME, P2PCORE.HOST? 1:2, 2);
 				}
 				break;
 			case LOAD:
 					Sleep(P2P_GAMECB_WAIT);
+					memset(recording_player_names, 0, sizeof(recording_player_names));
+					strncpy(recording_player_names[0], P2PCORE.HOST ? P2PCORE.USERNAME : P2PCORE.PEERNAME, 31);
+					strncpy(recording_player_names[1], P2PCORE.HOST ? P2PCORE.PEERNAME : P2PCORE.USERNAME, 31);
 					p2p_game_callback(P2PCORE.GAME, P2PCORE.HOST? 1:2, 2);
 					break;
 			case EXIT:

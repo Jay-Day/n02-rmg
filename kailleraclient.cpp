@@ -101,6 +101,7 @@ bool mod_rerun;
 #ifdef RECORDER
 char convert[256];
 HFILE out = HFILE_ERROR;
+char recording_player_names[4][32];
 
 class RecordingBufferC {
 public:
@@ -140,23 +141,27 @@ public:
 	}
 }RecordingBuffer;
 
-
-int WINAPI _gameCallback(char *game, int player, int numplayers){
-
-	if (out!=HFILE_ERROR) {
+static void close_recording() {
+	if (out != HFILE_ERROR) {
+		if (RecordingBuffer.len() > 0)
+			RecordingBuffer.write();
 		_lclose(out);
 		out = HFILE_ERROR;
 	}
+}
+
+int WINAPI _gameCallback(char *game, int player, int numplayers){
+
+	close_recording();
 
 	if (active_mod.RecordingEnabled()) {
 		n02_TRACE();
 		RecordingBuffer.reset();
-		
+
 		char FileName[2000];
-		//GetCurrentDirectory(5000, FileName);
-		//strcat(FileName, "\\records");
 		CreateDirectory("records", 0);
 
+		// Sanitize game name
 		char GN[36];
 		int j = 0;
 		for (int i = 0; i < (int)strlen(game) && j < 35; i++) {
@@ -165,49 +170,59 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 		}
 		GN[j] = 0;
 
-		//GetCurrentDirectory(5000, FileName);
-		//int ll = strlen(FileName);
+		// Build filename: YYMMDDHHMMSS-player1-player2-game.krec
 		time_t t = time(0);
-		wsprintf(FileName,".\\records\\%08X_%s.krec", t, GN);//wsprintf(FileName,".\\records\\%s[%i].krec", GN, time(NULL));
-		
-		//StatusOutput.out("started recording new file...");
-		//StatusOutput.out(FileName);
-		
-		
+		tm * lt = localtime(&t);
+		char datePart[16];
+		strftime(datePart, sizeof(datePart), "%y%m%d%H%M%S", lt);
+
+		char playerPart[256];
+		playerPart[0] = 0;
+		for (int p = 0; p < numplayers && p < 4; p++) {
+			if (recording_player_names[p][0] != 0) {
+				char sanitized[32];
+				int sj = 0;
+				for (int si = 0; recording_player_names[p][si] && sj < 31; si++) {
+					char c = recording_player_names[p][si];
+					if (isalpha(c) || isalnum(c))
+						sanitized[sj++] = c;
+				}
+				sanitized[sj] = 0;
+				if (sj > 0) {
+					strcat(playerPart, "-");
+					strcat(playerPart, sanitized);
+				}
+			}
+		}
+
+		wsprintf(FileName,".\\records\\%s%s-%s.krec", datePart, playerPart, GN);
+
+
 		for(unsigned int x=0; x < strlen(FileName); x++){
 			FileName[x] = convert[FileName[x]];
 		}
 
-		//MessageBox(0,FileName, "recording",0);
-		
 		//open file
 		OFSTRUCT of;
 		out = OpenFile(FileName, &of, OF_WRITE|OF_CREATE);
 
-		
+
 		if(out==HFILE_ERROR){
 			wsprintf(FileName+1000, "recording %s failed error = %i", FileName, GetLastError());
 			MessageBox(0,FileName+1000, "recording - error",0);
-
-			//StatusOutput.out("Failed creating file");
 		}
-		
-		
-		union {
-			
-			char GameName[128];
-			int timee;
-			
-			};
-			
-			strncpy(GameName, (game != NULL) ? game : "", sizeof(GameName) - 1);
-			GameName[sizeof(GameName) - 1] = 0;
-			
-			_lwrite(out, "KRC0", 4);
+
+
+		char GameName[128];
+
+		strncpy(GameName, (game != NULL) ? game : "", sizeof(GameName) - 1);
+		GameName[sizeof(GameName) - 1] = 0;
+
+		_lwrite(out, "KRC0", 4);
 		_lwrite(out, infos_copy.appName, 128);
 		_lwrite(out, GameName, 128);
 		time_t mytime = time(NULL);
-		_lwrite(out, (char*)&timee, 4);
+		_lwrite(out, (char*)&mytime, 4);
 		_lwrite(out, (char*)&player, 4);
 		_lwrite(out, (char*)&numplayers, 4);
 		n02_TRACE();
@@ -216,7 +231,7 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 	if (infos_copy.gameCallback)
 		return infos_copy.gameCallback(game, player, numplayers);
 	return 0;
-	
+
 }
 
 	void WINAPI _chatReceivedCallback(char *nick, char *text){
@@ -370,14 +385,14 @@ public:
 
 extern "C" {
 	kailleraInfos infos;
-	
+
 	void KAILLERA_DLLEXP kailleraGetVersion(char *version){
 		memcpy(version, "0.9", 4);
 	}
 	int KAILLERA_DLLEXP kailleraInit(){
 		k_socket::Initialize();
 		loadSettings();
-		
+
 #ifdef KAILLERA
 
 		mod_playback.MPV = player_MPV;
@@ -386,14 +401,14 @@ extern "C" {
 		mod_playback.SSDSTEP = player_SSDSTEP;
 		mod_playback.ChatSend = player_ChatSend;
 		mod_playback.RecordingEnabled = player_RecordingEnabled;
-		
+
 		mod_kaillera.GUI = kaillera_GUI;
 		mod_kaillera.SSDSTEP = kaillera_SelectServerDlgStep;
 		mod_kaillera.MPV = kaillera_modify_play_values;
 		mod_kaillera.ChatSend = kaillera_game_chat_send;
 		mod_kaillera.EndGame = kaillera_end_game;
 		mod_kaillera.RecordingEnabled = kaillera_RecordingEnabled;
-		
+
 		mod_p2p.GUI = p2p_GUI;
 		mod_p2p.SSDSTEP = p2p_SelectServerDlgStep;
 		mod_p2p.MPV = p2p_modify_play_values;
@@ -431,6 +446,7 @@ extern "C" {
 			convert[']'] = ']';
 			convert['.'] = '.';
 			convert['\\'] = '\\';
+			convert['-'] = '-';
 
 
 
@@ -450,10 +466,7 @@ extern "C" {
 		gamelist = 0;
 #ifdef KAILLERA
 #ifdef RECORDER
-		if (out!=HFILE_ERROR) {
-			_lclose(out);
-			out = HFILE_ERROR;
-		}
+		close_recording();
 #endif
 #endif
 	}
@@ -461,11 +474,11 @@ extern "C" {
 				infos = *infos_;
 				strncpy(APP, (infos.appName != NULL) ? infos.appName : "", 127);
 				APP[127] = 0;
-				
+
 				if (gamelist != 0)
 					free(gamelist);
 			gamelist = 0;
-			
+
 			char * xx = infos.gameList;
 			size_t l = 0;
 			if (xx != 0) {
@@ -493,17 +506,23 @@ extern "C" {
 		KSSDFA.input = 0;
 
 		gui_thread.st(parent);
-		
+
 		nThread game_thread;
 		game_thread.capture();
 		game_thread.sleep(1);
-		
+
 		if (gui_thread.running) {
 			do {
 				__try {
 					while (KSSDFA.state != 3) {
+						int prev_state = KSSDFA.state;
 						KSSDFA.state = KSSDFAST[((KSSDFA.state) << 2) | KSSDFA.input];
 						KSSDFA.input = 0;
+#ifdef RECORDER
+						if (prev_state == 2 && KSSDFA.state != 2) {
+							close_recording();
+						}
+#endif
 						if (KSSDFA.state == 2) {
 							MSG message;
 							while (PeekMessage(&message, 0, 0, 0, PM_REMOVE)) {
@@ -518,6 +537,9 @@ extern "C" {
 								infos.gameCallback(GAME, playerno, numplayers);
 						}
 						else if (KSSDFA.state == 0) {
+#ifdef RECORDER
+							close_recording();
+#endif
 							MSG message;
 							while (PeekMessage(&message, 0, 0, 0, PM_REMOVE)) {
 								TranslateMessage(&message);
@@ -543,7 +565,7 @@ extern "C" {
 			} while (KSSDFA.state != 3);
 		}
 	}
-	
+
 	int  KAILLERA_DLLEXP kailleraModifyPlayValues(void *values, int size){
 		//kaillera_core_debug("x");
 		if (KSSDFA.state==2) {
@@ -580,16 +602,13 @@ extern "C" {
 	void KAILLERA_DLLEXP kailleraEndGame(){
 #ifdef KAILLERA
 #ifdef RECORDER
-		if (out!=HFILE_ERROR) {
-			_lclose(out);
-			out = HFILE_ERROR;
-		}
+		close_recording();
 #endif
 		active_mod.EndGame();
 #else
 		p2p_EndGame();
 #endif
-		
+
 	}
 };
 

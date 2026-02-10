@@ -1157,6 +1157,14 @@ void kaillera_game_callback(char * game, char player, char players){
 	if (kaillera_RecordingEnabled())
 		kaillera_gdebug("- your game will be recorded");
 
+	// Populate player names for recording filename
+	memset(recording_player_names, 0, sizeof(recording_player_names));
+	int guCount = kaillera_sdlg_LV_GULIST.RowsCount();
+	for (int pi = 0; pi < guCount && pi < 4; pi++) {
+		kaillera_sdlg_LV_GULIST.CheckRow(recording_player_names[pi], 31, 0, pi);
+		recording_player_names[pi][31] = 0;
+	}
+
 	KSSDFA.input = KSSDFA_START_GAME;
 }
 void kaillera_game_netsync_wait_callback(int tx){
