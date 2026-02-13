@@ -117,6 +117,7 @@
 #define IDC_P2P_PASTE_CONNECT           1100
 #define IDC_P2P_ADV_COPYIP              1101
 #define BTN_COPYLOG                     1102
+#define BTN_OPENFOLDER                  1103
 
 // Next default values for new objects
 //
@@ -124,7 +125,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        115
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1103
+#define _APS_NEXT_CONTROL_VALUE         1104
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

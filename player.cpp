@@ -3,7 +3,9 @@
 #include "resource.h"
 #include "uihlp.h"
 #include <time.h>
+#include <shellapi.h>
 #include "errr.h"
+#include "common/nSettings.h"
 
 static void UpdateModeRadioButtons(HWND hDlg){
 	int mode = get_active_mode_index();
@@ -359,17 +361,31 @@ void RecordsList_DeleteSelected(){
 	}
 }
 
+static void SaveColumnWidths() {
+	static const char* colKeys[] = { "PBColDate", "PBColPlayers", "PBColGame", "PBColDuration", "PBColSize" };
+	for (int i = 0; i < 5; i++) {
+		int w = ListView_GetColumnWidth(RecordsListDlg_list.handle, i);
+		if (w > 0)
+			nSettings::set_int((char*)colKeys[i], w);
+	}
+}
+
 LRESULT CALLBACK RecordsListDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
 	case WM_INITDIALOG:
 		{
 			RecordsListDlg = hDlg;
 			RecordsListDlg_list.handle = GetDlgItem(hDlg, LV_GLIST);
-			RecordsListDlg_list.AddColumn("Date", 80);
-			RecordsListDlg_list.AddColumn("Players", 160);
-			RecordsListDlg_list.AddColumn("Game", 200);
-			RecordsListDlg_list.AddColumn("Duration", 60);
-			RecordsListDlg_list.AddColumn("Size", 60);
+
+			static const char* colKeys[] = { "PBColDate", "PBColPlayers", "PBColGame", "PBColDuration", "PBColSize" };
+			static const int colDefaults[] = { 80, 160, 200, 60, 60 };
+			static const char* colNames[] = { "Date", "Players", "Game", "Duration", "Size" };
+			for (int i = 0; i < 5; i++) {
+				int w = nSettings::get_int((char*)colKeys[i], colDefaults[i]);
+				if (w < 20) w = colDefaults[i];
+				RecordsListDlg_list.AddColumn((char*)colNames[i], w);
+			}
+
 			RecordsListDlg_list.FullRowSelect();
 			RecordsList_Populate();
 
@@ -378,6 +394,7 @@ LRESULT CALLBACK RecordsListDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM 
 		}
 		break;
 	case WM_CLOSE:
+		SaveColumnWidths();
 		EndDialog(hDlg, 0);
 		break;
 	case WM_COMMAND:
@@ -396,18 +413,27 @@ LRESULT CALLBACK RecordsListDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM 
 		case BTN_DELETE:
 			RecordsList_DeleteSelected();
 			break;
+		case BTN_OPENFOLDER:
+			{
+				CreateDirectory(".\\records", 0);
+				ShellExecute(hDlg, "open", ".\\records", NULL, NULL, SW_SHOWNORMAL);
+			}
+			break;
 		case RB_MODE_P2P:
 			if (player_playing) player_EndGame();
+			SaveColumnWidths();
 			if (activate_mode(0))
 				SendMessage(hDlg, WM_CLOSE, 0, 0);
 			break;
 		case RB_MODE_CLIENT:
 			if (player_playing) player_EndGame();
+			SaveColumnWidths();
 			if (activate_mode(1))
 				SendMessage(hDlg, WM_CLOSE, 0, 0);
 			break;
 		case RB_MODE_PLAYBACK:
 			if (player_playing) player_EndGame();
+			SaveColumnWidths();
 			if (activate_mode(2))
 				SendMessage(hDlg, WM_CLOSE, 0, 0);
 			break;
