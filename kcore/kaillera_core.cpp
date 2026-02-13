@@ -69,6 +69,7 @@ void kaillera_print_core_status(){
 //void __cdecl kprintf(char * arg_0, ...);
 
 bool kaillera_core_initialized = false;
+static volatile bool kaillera_step_active = false;
 
 void p2p_InitializeTime();
 int p2p_GetTime();
@@ -88,9 +89,17 @@ bool kaillera_core_cleanup(){
 	//kprintf(__FILE__ ":%i", __LINE__);
 	n02_TRACE();
 	if (kaillera_core_initialized){
-		if (KAILLERAC.connection)
-			delete KAILLERAC.connection;
+		// Null the pointer before deleting so the other thread
+		// sees NULL if it races past the KAILLERA_CORE_INITIALIZED check.
+		k_message* conn = KAILLERAC.connection;
 		KAILLERAC.connection = 0;
+		// Wait for any in-flight kaillera_step() to finish before
+		// freeing the connection (it may be inside check_sockets which
+		// blocks up to 200ms).
+		while (kaillera_step_active)
+			Sleep(10);
+		if (conn)
+			delete conn;
 
 		while (KAILLERAC.kaillera_incoming_data_cache.length>0) {
 			free(KAILLERAC.kaillera_incoming_data_cache[0]);
@@ -515,11 +524,15 @@ void kaillera_ProcessGeneralInstruction(k_instruction * ki) {
 
 void kaillera_step(){
 	n02_TRACE();//kprintf(__FILE__ ":%i", __LINE__);
+	if (!KAILLERAC.connection) return;
+	kaillera_step_active = true;
+	if (!KAILLERAC.connection) { kaillera_step_active = false; return; }
 	k_socket::check_sockets(0,200);
 	while (KAILLERAC.connection && KAILLERAC.connection->has_data()){
 		//kprintf(__FILE__ ":%i", __LINE__);
 		k_instruction ki;
 		sockaddr_in saddr;
+		if (!KAILLERAC.connection) break;
 		if (KAILLERAC.connection->receive_instruction(&ki, false, &saddr)){
 			kaillera_ProcessGeneralInstruction(&ki);
 		}
@@ -545,6 +558,7 @@ void kaillera_step(){
 		KAILLERAC.connection->send_instruction(&trst);
 		//kaillera_core_debug("TMOUTRST");
 	}
+	kaillera_step_active = false;
 }
 
 void kaillera_chat_send(char * text) {

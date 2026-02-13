@@ -2176,6 +2176,7 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 
 		DialogBox(hx, (LPCTSTR)KAILLERA_SDLG, pDlg, (DLGPROC)KailleraServerDialogProc);
 		//disconnect
+		KAILLERA_CORE_INITIALIZED = false;
 		char quitmsg[128] = "Open Kaillera - n02 " KAILLERA_VERSION;
 		// Frame delay field repurposed - use default quit message
 		kaillera_disconnect(quitmsg);
@@ -2194,7 +2195,6 @@ void ConnectToServer(char * ip, int port, HWND pDlg,char * name) {
 	} else {
 		MessageBox(pDlg, "Core Initialization Failed", 0, 0);
 	}
-	KAILLERA_CORE_INITIALIZED = false;
 }
 //===============================================================================
 //===============================================================================
