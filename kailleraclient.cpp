@@ -100,7 +100,7 @@ bool mod_rerun;
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef RECORDER
 char convert[256];
-HFILE out = HFILE_ERROR;
+HANDLE out = INVALID_HANDLE_VALUE;
 char recording_player_names[4][32];
 
 class RecordingBufferC {
@@ -136,17 +136,18 @@ public:
 		}
 	}
 	void write(){
-		_lwrite(out, buffer, len());
+		DWORD written;
+		WriteFile(out, buffer, len(), &written, NULL);
 		reset();
 	}
 }RecordingBuffer;
 
 static void close_recording() {
-	if (out != HFILE_ERROR) {
+	if (out != INVALID_HANDLE_VALUE) {
 		if (RecordingBuffer.len() > 0)
 			RecordingBuffer.write();
-		_lclose(out);
-		out = HFILE_ERROR;
+		CloseHandle(out);
+		out = INVALID_HANDLE_VALUE;
 	}
 }
 
@@ -161,41 +162,13 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 		char FileName[2000];
 		CreateDirectory("records", 0);
 
-		// Sanitize game name
-		char GN[36];
-		int j = 0;
-		for (int i = 0; i < (int)strlen(game) && j < 35; i++) {
-			if (isalpha(game[i]) || isalnum(game[i]))
-				GN[j++] = game[i];
-		}
-		GN[j] = 0;
-
-		// Build filename: YYMMDDHHMMSS-player1-player2-game.krec
+		// Build filename: YYMMDDHHMMSS.krec (player/game info is in the KRC1 header)
 		time_t t = time(0);
 		tm * lt = localtime(&t);
 		char datePart[16];
 		strftime(datePart, sizeof(datePart), "%y%m%d%H%M%S", lt);
 
-		char playerPart[256];
-		playerPart[0] = 0;
-		for (int p = 0; p < numplayers && p < 4; p++) {
-			if (recording_player_names[p][0] != 0) {
-				char sanitized[32];
-				int sj = 0;
-				for (int si = 0; recording_player_names[p][si] && sj < 31; si++) {
-					char c = recording_player_names[p][si];
-					if (isalpha(c) || isalnum(c))
-						sanitized[sj++] = c;
-				}
-				sanitized[sj] = 0;
-				if (sj > 0) {
-					strcat(playerPart, "-");
-					strcat(playerPart, sanitized);
-				}
-			}
-		}
-
-		wsprintf(FileName,".\\records\\%s%s-%s.krec", datePart, playerPart, GN);
+		wsprintf(FileName,".\\records\\%s.krec", datePart);
 
 
 		for(unsigned int x=0; x < strlen(FileName); x++){
@@ -203,28 +176,27 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 		}
 
 		//open file
-		OFSTRUCT of;
-		out = OpenFile(FileName, &of, OF_WRITE|OF_CREATE);
+		out = CreateFile(FileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
-
-		if(out==HFILE_ERROR){
+		if(out==INVALID_HANDLE_VALUE){
 			wsprintf(FileName+1000, "recording %s failed error = %i", FileName, GetLastError());
 			MessageBox(0,FileName+1000, "recording - error",0);
 		}
 
-
+		DWORD written;
 		char GameName[128];
 
 		strncpy(GameName, (game != NULL) ? game : "", sizeof(GameName) - 1);
 		GameName[sizeof(GameName) - 1] = 0;
 
-		_lwrite(out, "KRC0", 4);
-		_lwrite(out, infos_copy.appName, 128);
-		_lwrite(out, GameName, 128);
+		WriteFile(out, "KRC1", 4, &written, NULL);
+		WriteFile(out, infos_copy.appName, 128, &written, NULL);
+		WriteFile(out, GameName, 128, &written, NULL);
 		time_t mytime = time(NULL);
-		_lwrite(out, (char*)&mytime, 4);
-		_lwrite(out, (char*)&player, 4);
-		_lwrite(out, (char*)&numplayers, 4);
+		WriteFile(out, (char*)&mytime, 4, &written, NULL);
+		WriteFile(out, (char*)&player, 4, &written, NULL);
+		WriteFile(out, (char*)&numplayers, 4, &written, NULL);
+		WriteFile(out, (char*)recording_player_names, 128, &written, NULL);
 		n02_TRACE();
 	}
 
@@ -235,7 +207,7 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 }
 
 	void WINAPI _chatReceivedCallback(char *nick, char *text){
-		if (out != HFILE_ERROR) {
+		if (out != INVALID_HANDLE_VALUE) {
 			RecordingBuffer.put_char(8);
 			{
 				size_t nickLen = strlen(nick) + 1;
@@ -250,7 +222,7 @@ int WINAPI _gameCallback(char *game, int player, int numplayers){
 			infos_copy.chatReceivedCallback(nick, text);
 	}
 	void WINAPI _clientDroppedCallback(char *nick, int playernb){
-		if (out != HFILE_ERROR) {
+		if (out != INVALID_HANDLE_VALUE) {
 			RecordingBuffer.put_char(20);
 			{
 				size_t nickLen = strlen(nick) + 1;
@@ -575,7 +547,7 @@ extern "C" {
 
 			short siz = active_mod.MPV(values, size);
 
-			if (out != HFILE_ERROR) {
+			if (out != INVALID_HANDLE_VALUE) {
 				RecordingBuffer.put_char(0x12);
 				RecordingBuffer.put_short(siz);
 				RecordingBuffer.put_bytes((char*)values, siz);
